@@ -60,7 +60,7 @@ def left_join_data(cleaned_df, avg_groupby_cat_df, key=None, left_index=False, r
     return pd.merge(left=cleaned_df, right=avg_groupby_cat_df, how='left',
                    left_index=left_index, right_index=right_index)
 
-def EDA_pivot_table(cleaned_df, cat_var, num_var):
+def ETL_pivot_table(cleaned_df, cat_var, num_var):
     '''Creates a pivot table based on categorical var and average numerical var'''
     pivot_cat_df = cleaned_df.pivot_table(index=cat_var, values=num_var, aggfunc=np.mean)
     pivot_cat_df.reset_index(level=0, inplace=True)
@@ -98,9 +98,9 @@ def model_tuning_param(model, feature_df, label_df, param_dist, n_iter):
 def print_best_params(random_search, param_1=None, param_2=None, param_3=None, param_4="None"):
     '''Print the best model parameter'''
     print("Best " + param_1 + ":", random_search.best_estimator_.get_params()[param_1])
-    print("Best " + param_1 + ":", random_search.best_estimator_.get_params()[param_2])
-    print("Best " + param_1 + ":", random_search.best_estimator_.get_params()[param_3])
-    print("Best " + param_1 + ":", random_search.best_estimator_.get_params()[param_4])
+    print("Best " + param_2 + ":", random_search.best_estimator_.get_params()[param_2])
+    print("Best " + param_3 + ":", random_search.best_estimator_.get_params()[param_3])
+    print("Best " + param_4 + ":", random_search.best_estimator_.get_params()[param_4])
 
 def model_train(model, feature_df, label_df, n_proc, mean_mse, cv_std):
     '''Train a model and output mean MSE and CV Std.Dev MSE'''
@@ -156,11 +156,11 @@ if __name__ == '__main__':
 # ensure data is ready for modeling
 # create any new features needed to potentially enhance model
 #---- Compute Pivot Table ----#
-    pivot_salary_industry_df = EDA_pivot_table(cleaned_df, 'industry', 'salary')
-    pivot_yearsExp_industry_df = EDA_pivot_table(cleaned_df, 'industry', 'yearsExperience')
-    pivot_yearsExp_jobType_df = EDA_pivot_table(cleaned_df, 'jobType', 'yearsExperience')
-    pivot_dist_industry_df = EDA_pivot_table(cleaned_df, 'industry', 'milesFromMetropolis')
-    pivot_dist_jobType_df = EDA_pivot_table(cleaned_df, 'jobType', 'milesFromMetropolis')
+    pivot_salary_industry_df = ETL_pivot_table(cleaned_df, 'industry', 'salary')
+    pivot_yearsExp_industry_df = ETL_pivot_table(cleaned_df, 'industry', 'yearsExperience')
+    pivot_yearsExp_jobType_df = ETL_pivot_table(cleaned_df, 'jobType', 'yearsExperience')
+    pivot_dist_industry_df = ETL_pivot_table(cleaned_df, 'industry', 'milesFromMetropolis')
+    pivot_dist_jobType_df = ETL_pivot_table(cleaned_df, 'jobType', 'milesFromMetropolis')
         
     #perform left joins on avg_salary and train/test set:
     joined_train_df = left_join_data(cleaned_df, pivot_salary_industry_df, key='industry')    
@@ -218,6 +218,7 @@ if __name__ == '__main__':
 #---- 3 Establsih a baseline ----#
 # Select a reasonable metric (i.e., MSE, RMSE)
 # Create an extremely simple model and measure the efficacy
+## Test: Simple LinearRegression
 #    lr = LinearRegression()
 #    baseline_cv = cross_val_score(lr, train_L1_df, label_df, 
 #                                  cv=5, scoring='neg_mean_squared_error')
@@ -260,56 +261,61 @@ if __name__ == '__main__':
     verbose_lv = 5
 
 ###############################################################################        
-#    #model tuning with RandomizedSearchCV: RandomForest
-#    rf = RandomForestRegressor()   
-#    n_iter = 1
-#    param_dist_rf = {'n_estimators':sp.randint(10,50), 
+##model tuning with RandomizedSearchCV: RandomForest
+#rf = RandomForestRegressor()   
+#n_iter = 1
+#param_dist_rf = {'n_estimators':sp.randint(10,50), 
 #                  'max_depth':sp.randint(1,10),
 #                  'min_samples_split':sp.randint(10,60),
 #                  'max_features':sp.randint(0,23)}
-#    random_search_rf = model_param_tuning(rf, train_L1_df, label_df, param_dist_rf, n_iter)    
-#    
-#    # print the best model parameters: RandomForest    
-#    param_1 = 'n_estimators' 
-#    param_2 = 'max_depth'
-#    param_3 = 'min_samples_split'
-#    param_4 = 'max_features'
-#    
-#    print_best_params(random_search_rf, param_1, param_2, param_3, param_4)
+#random_search_rf = model_param_tuning(rf, train_L1_df, label_df, param_dist_rf, n_iter)    
+    
+## print the best model parameters: RandomForest    
+#param_1 = 'n_estimators' 
+#param_2 = 'max_depth'
+#param_3 = 'min_samples_split'
+#param_4 = 'max_features'
+    
+#print_best_params(random_search_rf, param_1, param_2, param_3, param_4)
 ###############################################################################    
-##model tuning with RandomizedSearchCV: GradientBoosting
-#    gbr = GradientBoostingRegressor()
-#    n_iter = 1
-#    param_dist_gbr = {'n_estimators':sp.randint(10,40), 
-#                  'max_depth':sp.randint(1,20),
-#                  'loss':['ls']}
-#    random_search_gbr = model_param_tuning(gbr, train_L1_df, label_df, param_dist_gbr, n_iter)    
-#    
-#    # print the best model parameters: GradientBoosting    
-#    param_1 = 'n_estimators' 
-#    param_2 = 'max_depth'
-#    param_3 = 'loss'
-#    
-#    print_best_params(random_search_gbr, param_1, param_2, param_3)        
+#model tuning with RandomizedSearchCV: GradientBoosting
+    #gbr = GradientBoostingRegressor()
+    #n_iter = 1
+    #param_dist_gbr = {'n_estimators':sp.randint(10,40), 
+    #                  'max_depth':sp.randint(1,20),
+    #                  'min_samples_split':sp.randint(1,20), 
+    #                  'loss':['ls']}
+    #random_search_gbr = model_param_tuning(gbr, train_L1_df, label_df, param_dist_gbr, n_iter)    
+    
+## print the best model parameters: GradientBoosting    
+    #param_1 = 'n_estimators' 
+    #param_2 = 'max_depth'
+    #param_3 = 'min_samples_split'
+    #param_4 = 'loss'
+    
+#print_best_params(random_search_gbr, param_1, param_2, param_3)        
 ###############################################################################    
-    #model tuning with RandomizedSearchCV: XGBRegressor
+#model tuning with RandomizedSearchCV: XGBRegressor
     xgb = XGBRegressor()   
     n_iter = 1
     param_dist_xgb = {'n_estimators':sp.randint(10,40), 
                   'max_depth':sp.randint(1,20),
+                  'gamma':sp.randint(1,20),
                   'learning_rate':np.random.uniform(0,1,10)}
     random_search_xgb = model_tuning_param(xgb, train_L1_df, label_df, param_dist_xgb, n_iter)    
     
-    # print the best model parameters: XGBRegressor    
+# print the best model parameters: XGBRegressor    
     param_1 = 'n_estimators' 
     param_2 = 'max_depth'
-    param_3 = 'learning_rate'
+    param_3 = 'gamma'
+    param_4 = 'learning_rate'
     
-    print_best_params(random_search_xgb, param_1, param_2, param_3)    
+    print_best_params(random_search_xgb, param_1, param_2, param_3, param_4)    
 ###############################################################################    
 # Model List to Train: Order of Model Complexity
     lr_L1 = Lasso(alpha=0.01)
     lr_L2 = Ridge(alpha=0.01)
+
 #    lr_std_pca = make_pipeline(StandardScaler(), PCA(), LinearRegression())
 #    pr_std = make_pipeline(StandardScaler(), PolynomialFeatures(degree=2), LinearRegression())  
     rf = RandomForestRegressor(n_estimators=43, n_jobs=n_proc, max_depth=5,
