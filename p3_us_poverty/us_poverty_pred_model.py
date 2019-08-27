@@ -189,6 +189,24 @@ def model_summary(model, mean_rmse, cv_std):
     print('\nModel:\n', model)
     print('Average RMSE:\n', mean_rmse[model])
     print('Std. Dev during CV:\n', cv_std[model])
+    
+def plot_reg_compare(y_train_pred, y_train_act):
+    '''Plot a scatter plot to compare predicted vs actual label'''
+    plt.scatter(y_train_pred, y_train_act, c='blue', 
+                edgecolor='w', marker='o', label='train set')
+    plt.xlabel('Predicted poverty rate')
+    plt.ylabel('Actual poverty rate')
+    plt.legend(loc='upper left')
+
+def plot_reg_residual(y_train_pred, y_train_act):
+    '''Plot a scatter plot to visualize residual from predicted vs. actual label'''
+    plt.scatter(y_train_pred, (y_train_pred - y_train_act), c='blue',
+                edgecolor='w', marker='o', label='train set')
+    plt.hlines(y=0, xmin=0, xmax=50, colors='k', lw=3)
+    plt.xlim([0,50])
+    plt.xlabel('Predicted poverty rate')
+    plt.ylabel('Residual poverty rate')
+    plt.legend(loc='upper left')
 
 def model_results(model, mean_rmse, predictions, feature_importances):
     '''Saves the model name, mean_rmse, predicted rate, and feature importances'''
@@ -201,8 +219,8 @@ def model_results(model, mean_rmse, predictions, feature_importances):
 # --- 3. Load the data --- #
 # Define input CSVs:
 if __name__ == '__main__':
-    train_file ='PP_train.csv'
-    test_file ='PP_test.csv'
+    train_file ='poverty_train.csv'
+    test_file ='poverty_test.csv'
 
 # Define type of variables list:
 #df_train.select_dtypes(include='object').columns
@@ -310,7 +328,7 @@ f, ax = plt.subplots(figsize=(10, 10))
 cmap = sns.diverging_palette(220, 10, as_cmap=True)
 sns.set(font_scale=1.1)
 sns.heatmap(corr, mask=mask, cmap=cmap, vmax=.3, center=0,
-            annot=True, square=True, linewidths=.5,
+            annot=True, square=True, linewidths=.5, fmt=".2f",
             annot_kws={'size':7}, cbar_kws={"shrink": .6})
 plt.xticks(rotation=90)
 plt.yticks(rotation=0)
@@ -423,17 +441,17 @@ imputed_test_df['yr'] = convert_data_type(imputed_test_df, 'yr', 'category')
 imputed_train_df.dtypes
 imputed_test_df.dtypes
 
-# Save feature_df for EDA portfolio:
-df_eda = imputed_train_df.copy()
-
-# Inverse transform back to original categorical variables:
-inv_urban_deg_map = {i:j for j, i in urban_deg_map.items()}
-inv_urban_size_map= {i:j for j, i in urban_size_map.items()}
-
-df_eda['area__rucc'] = encode_ordinal_feature(df_eda, 'area__rucc', inv_urban_deg_map)
-df_eda['area__urban_influence'] = encode_ordinal_feature(df_eda, 'area__urban_influence', inv_urban_size_map)
-
-df_eda.to_csv('df_eda.csv', index=False)
+## Save feature_df for EDA portfolio:
+#df_eda = imputed_train_df.copy()
+#
+## Inverse transform back to original categorical variables:
+#inv_urban_deg_map = {i:j for j, i in urban_deg_map.items()}
+#inv_urban_size_map= {i:j for j, i in urban_size_map.items()}
+#
+#df_eda['area__rucc'] = encode_ordinal_feature(df_eda, 'area__rucc', inv_urban_deg_map)
+#df_eda['area__urban_influence'] = encode_ordinal_feature(df_eda, 'area__urban_influence', inv_urban_size_map)
+#
+#df_eda.to_csv('df_eda.csv', index=False)
 
 # --- 8. Feature engineering: groupby categorical var ---
 # create groupby dataframes:
@@ -604,14 +622,32 @@ model = min(mean_rmse, key=mean_rmse.get)
 print('\nBest model with the lowest RMSE:')
 print(model)
 
+# --- 16. Model Evaluation: Scatter Plot --- #
+# Prepare predicted and original poverty rate
+y_train_act = label_df.copy()
+
+# re-train a model with best model:
+model.fit(feature_df, label_df)
+y_train_pred = model.predict(feature_df)
+        
+# Plot a comparison scatter plot: predicted vs. actual
+plt.figure(figsize=(14,7))
+plt.subplots_adjust(wspace=0.2)
+plt.subplot(1,2,1)
+plot_reg_compare(y_train_pred, y_train_act)
+plt.title('Poverty rate of predicted vs. actual: XGBRegressor')
+
+# Plot a residual scatter plot: predicted vs. actual
+plt.subplot(1,2,2)
+plot_reg_residual(y_train_pred, y_train_act)
+plt.title('Poverty rate of predicted vs. residual: XGBRegressor')
+plt.show()
+
 ###########################
 # Part 4 - DEPLOY PHASE ###
 ###########################
-# --- 16. Automate the model pipeline --- #
-# re-train a model on entire set
-model.fit(feature_df, label_df)
-
-# make predictions based on test set
+# --- 17. Automate the model pipeline --- #
+# make predictions based on a test set
 df_pred = model.predict(test_df)
 df_pred = pd.DataFrame(df_pred)
 
@@ -622,7 +658,7 @@ df_predictions.columns = ['row_id','poverty_rate']
 
 del(df_pred, df_row_id, df_row_id_test)
 
-# --- 17. Deploy the solution --- #
+# --- 18. Deploy the solution --- #
 #store feature importances
 if hasattr(model, 'feature_importances_'):
     importances = model.feature_importances_
@@ -644,5 +680,5 @@ plt.xticks(rotation=90, fontsize=9)
 plt.title('feature importance plot: best trained model')
 plt.show()
     
-#Save model results as .txt file:
+#Save model results as .csv file:
 model_results(model, mean_rmse[model], df_predictions, feature_importances)
