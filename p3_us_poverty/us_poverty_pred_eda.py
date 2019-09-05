@@ -357,12 +357,13 @@ plt.show()
 
 
 #---- Convert categorical variable data type from object to category ----#
-EDA_convert_object_to_cat(df_eda)
+df_eda_cm = df_eda.copy()
+EDA_convert_object_to_cat(df_eda_cm)
 
 #---- Encode categorical variables using avg. salary for each category to replace label ----#
-for col in df_eda.columns:
-    if df_eda[col].dtype.name == "category":
-       EDA_encode_cat_var(df_eda, col) 
+for col in df_eda_cm.columns:
+    if df_eda_cm[col].dtype.name == "category":
+       EDA_encode_cat_var(df_eda_cm, col) 
 
 #---- Plot correlation matrix chart ----#
 # Define list of features and salary
@@ -378,7 +379,7 @@ features = ['demo__birth_rate_per_1k', 'demo__death_rate_per_1k',
                   'health__motor_vehicle_crash_deaths_per_100k', 'health__pop_per_dentist', 'health__pop_per_primary_care_physician']
 label = ['poverty_rate']    
 
-EDA_plot_corr_matrix(df_eda, features, label)
+EDA_plot_corr_matrix(df_eda_cm, features, label)
 plt.show()
 
 ########################################################
