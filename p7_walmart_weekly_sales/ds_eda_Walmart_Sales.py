@@ -283,6 +283,11 @@ var_list = ['File_Type', 'md1_presence', 'md2_presence', 'md3_presence', 'md4_pr
 df_cleaned = EDA_drop_column(df_cleaned, var_list)
 df_cleaned.dtypes
 
+# # Set the Date column as dateindex type:
+df_cleaned['Date'] = pd.to_datetime(df_cleaned['Date'])
+df_cleaned = df_cleaned.set_index('Date')
+df_cleaned.sort_index(axis=0)
+
 #---- Compute % of Missing Data ----#
 df_missing = EDA_missing_data(df_cleaned)
 df_missing
@@ -429,11 +434,6 @@ df_cleaned.columns
 # Subset sales for Store=4
 df_store_4 = df_cleaned[df_cleaned['Store']==4]
 df_store_4.dtypes
-
-# Set the Date column as dateindex type:
-df_store_4['Date'] = pd.to_datetime(df_store_4['Date'])
-df_store_4= df_store_4.set_index('Date')
-df_store_4.sort_index(axis=0)
 
 # Group them by similar types of numerical features
 cols_markdown = ['MarkDown1', 'MarkDown5']
