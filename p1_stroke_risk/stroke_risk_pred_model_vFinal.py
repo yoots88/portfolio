@@ -3,11 +3,11 @@ import os
 os.getcwd()
 
 # Set path:
-#path = 'D:/P1_Stroke_Risk/A. Coding'
-path = 'D:/TY Workspace/3. Data Science Portfolio/1. Completed Portfolios/p1_stroke_risk/A. Coding'
+path = 'D:/TY Workspace/3. Data Science Portfolio/1. Completed Portfolios/P1_Stroke_Risk_Stratification/A. Coding'
 os.chdir(path)
 
 # Import all libraries #
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -38,140 +38,89 @@ from xgboost import XGBClassifier
 __author__ = 'Taesun Yoo'
 __email__ = 'yoots1988@gmail.com'
 
+# Check out Python version:
+print ("Python version: {}".format(sys.version))
+
 #############################
 # Part 2 - DISCOVER PHASE ###
 #############################
-
-# --- 2. Write Out List of Functions --- #
+# --- 1. Write Out List of Functions --- #
 def load_file(file):
-    '''load the CSV files as a dataframe'''
-    df = pd.read_csv(file)
+    '''load input CSVs as a dataframe'''
+    return pd.read_csv(file, encoding='latin1')
+
+
+def convert_dt_as_custom(df, var_name, dt_type):
+    '''convert datatype on selected variables'''
+    df[var_name] = df[var_name].astype(dt_type)
+    return df[var_name]
+
+
+def convert_dt_as_category(df):
+    '''convert datatype from object to category'''
+    for col in df.columns:
+        if df[col].dtype.name == 'object':
+            df[col] = df[col].astype('category')            
+
+        
+def drop_column(df, var_name):
+    ''' drop a column on dataframe '''
+    df = df.drop(var_name, axis=1)
     return df
 
-def drop_column_by_index(df, var):
-    '''drop a column by specified variable'''
-    df = df.drop(var, axis=1)
-    return df
 
-def join_data(df_train, df_label, key, 
+def clean_data(raw_df):
+    '''remove rows that contain outliers'''
+    clean_df = raw_df.drop_duplicates(subset='id')
+    return clean_df
+    
+
+def join_data(df1, df2, join_type, key=None,
               left_index=None, right_index=None):
-    '''Merge the feature and label dataframe(s)'''
-    df_join = pd.merge(df_train, df_label, how='inner', on=key,
-                         left_index=False, right_index=False)
+    '''merge the dataframes by a key'''
+    df_join = pd.merge(df1, df2, how=join_type, on=key,
+                       left_index=False, right_index=False)
     return df_join
 
-def clean_data(df):
-    '''drop any duplicate based on specific column'''
-    clean_df = df.drop_duplicates(subset='id')
-    return clean_df
 
-def eda_missing_data(df):
-    missing_df = pd.DataFrame(df.isnull().sum())
-    missing_df.columns = ['count']
-    missing_df['pct'] = (missing_df['count']/len(df))*100
-    return missing_df
+def avg_groupby_data(cleaned_df, num_var, cat_var, avg_var_name):
+    '''groupby categorical var to calculate an average numerical feature'''
+    avg_groupby_cat_val = cleaned_df.groupby(cat_var)[num_var].mean().sort_values(ascending=False)
+    avg_groupby_cat_df = pd.DataFrame({cat_var:list(cleaned_df[cat_var].unique()),
+                                      avg_var_name:avg_groupby_cat_val})
+    avg_groupby_cat_df.reset_index(drop=True, inplace=True)
+    return avg_groupby_cat_df
 
-def eda_summary_stat_num(df):
-    '''compute summary statistics for numerical variables'''
-    df_stat_num = df.describe().T
-    df_stat_num = df_stat_num[['count', 'min', 'mean', 'max', '25%', '50%', '75%', 'std']]
-    df_stat_num = df_stat_num.sort_values(by='count', ascending=True)
-    df_stat_num = pd.DataFrame(df_stat_num)
-    return df_stat_num
-
-def eda_summary_stat_cat(df):
-    '''compute summary statistics for categorical variables'''
-    df_stat_cat = pd.DataFrame(df.describe(include='O').T)
-    return df_stat_cat
-
-def compute_outliers(df_stat_num):
-    df_stat_num['IQR'] = df_stat_num['75%'] - df_stat_num['25%']
-    df_stat_num['UB'] = df_stat_num['75%'] + 1.5*df_stat_num['IQR']
-    df_stat_num['LB'] = df_stat_num['25%'] - 1.5*df_stat_num['IQR']
-    df_outliers = df_stat_num[['LB', 'min', 'UB', 'max']]
-    return df_outliers
-
-def EDA_plot_correlation(df_EDA):
-    '''compute and plot correlation matrix'''
-    corr = df_EDA.corr()
-    # Create a mask to filter matrix: diagonally
-    mask = np.zeros_like(corr, dtype=np.bool)
-    mask[np.triu_indices_from(mask)] = True
-    # Matrix Plot:
-    fig, ax = plt.subplots(figsize=(7,7))
-    cmap = sns.diverging_palette(220,10,as_cmap=True)
-    sns.set(font_scale=1.1)
-    sns.heatmap(corr, mask=mask, cmap=cmap, vmax=.3, center=0,
-                annot=True, square=True, linewidths=.5, fmt=".2f",
-                annot_kws={'size':10}, cbar_kws={'shrink':.6})
-    plt.xticks(rotation=90)
-    plt.yticks(rotation=0)
-    plt.show()
 
 def encode_categorical_feature(df, var_name, map_name):
     '''encode categorical features into mapping values'''
     df[var_name] = df[var_name].map(map_name)
     return df[var_name]
 
-def feature_imputer(X, missing_val_format, method, indices):
-    '''imputes missing values based on different uni-variate methods'''
-    imputer = Imputer(missing_values=missing_val_format, strategy=method, axis=0)
-    imputer = imputer.fit(X.iloc[:, indices])
-    X.iloc[:, indices] = imputer.transform(X.iloc[:, indices])
-    return X.iloc[:, indices]
 
-def convert_data_type(df, var_name, dt_type):
-    '''convert data type into specified metadata type'''
-    df[var_name] = df[var_name].astype(dt_type)
-    return df[var_name]
+def EDA_missing_data(df):
+    ''' compute missing value % on a df'''
+    df_missing = pd.DataFrame(df.isnull().sum())
+    df_missing.columns = ['count']
+    df_missing = df_missing.sort_values(by='count', ascending=False)
+    df_missing['pct'] = (df_missing['count']/len(df)) * 100
+    return df_missing
 
-def split_dataframe(df):
-    '''Split dataframe into features and label'''
-    X, y = df.iloc[:, :-1], df.iloc[:, -1]
-    return X, y
 
-def avg_groupby_data(df, num_var, cat_var, avg_var_name):
-    '''perform average group by categorical variable to compute a mean'''
-    avg_groupby_val = df.groupby(cat_var)[num_var].mean().sort_values(ascending=False)
-    avg_groupby_df = pd.DataFrame({cat_var:list(df[cat_var].unique()),
-                                   avg_var_name:avg_groupby_val})
-    avg_groupby_df.reset_index(drop=True, inplace=True)
-    return avg_groupby_df
+def EDA_summary_stat_num(df):
+    ''' compute numerical summary statistics '''
+    df_stat_num = df.describe().T
+    df_stat_num = df_stat_num[['count', 'min', 'mean', 'max', '25%', '50%', '75%', 'std']]
+    df_stat_num = df_stat_num.sort_values(by='count', ascending=True)
+    df_stat_num = pd.DataFrame(df_stat_num)
+    return df_stat_num
 
-def left_join_data(train_df, avg_groupby_df, key=None, left_index=False, right_index=False):
-    '''performs left join on train data to average groupby data'''
-    joined_df = pd.merge(train_df, avg_groupby_df, how='left', on=key,
-                         left_index=left_index, right_index=right_index)
-    return joined_df
 
-def one_hot_encode_feature(df, cat_vars=None, num_vars=None):
-    '''performs one-hot encoding on all categorical variables and
-       combine results with numerical variables '''
-    cat_df = pd.get_dummies(df[cat_vars], drop_first=True)
-    num_df = df[num_vars].apply(pd.to_numeric)
-    return pd.concat([cat_df, num_df], axis=1)
+def EDA_summary_stat_cat(df):
+    ''' compute numerical summary statistics '''
+    df_stat_cat = pd.DataFrame(df.describe(include='category').T)
+    return df_stat_cat
 
-def get_label_data(df, label_var):
-    '''separate label from a dataframe'''
-    df_label = df[label_var]
-    return df_label
-
-def split_data_by_age_group(df, var_name):
-    '''split dataframe by age group'''
-    df_age_group = pd.DataFrame(df.groupby(var_name)[var_name].count().sort_values(ascending=False))
-    df_age_group.columns = ['count']
-    df_age_group.index.name = 'age_group'
-    return df_age_group
-
-def strata_by_age_group(df, group_name, idx):
-    '''stratify dataframe by label group index'''
-    df_strata = df[df[group_name] == idx]
-    return df_strata
-
-def resample_data_by_group(df, n_samples):
-    '''resample data by random replacement'''
-    sample_group = resample(df, n_samples=n_samples, random_state=0, replace=True)
-    return sample_group
 
 def EDA_feature_importance_plot(model, X, y):
     '''plots the feature importance plot on trained model'''
@@ -185,13 +134,93 @@ def EDA_feature_importance_plot(model, X, y):
     plt.xticks(range(X.shape[1]), feat_labels[indices], rotation=90, fontsize=7)
     plt.xlim(-1, X.shape[1])
 
+
+def feature_replacement(X):
+    ''' replace missing values based on specific data type of a column '''
+    for col in X.columns:
+        if X[col].dtype.name == 'object':
+            mode = X[col].mode().iloc[0]
+            X[col] = X[col].fillna(mode)
+        elif X[col].dtype.name == 'float64':
+            mean = X[col].mean()
+            X[col] = X[col].fillna(mean)
+        else:
+            X[col].dtype.name == 'int64'
+            median = X[col].median()
+            X[col] = X[col].fillna(median)
+
+
+def apply_binning(df, new_var, old_var, bins, labels):
+    '''apply binning on a selected variable'''
+    df[new_var] = pd.cut(df[old_var], bins=bins,
+                          labels=labels, include_lowest=True)
+    return df[new_var]
+
+
+def one_hot_encode_feature(df, cat_vars=None, num_vars=None):
+    '''performs one-hot encoding on all categorical variables and
+       combine results with numerical variables '''
+    cat_df = pd.get_dummies(df[cat_vars], drop_first=True)
+    num_df = df[num_vars].apply(pd.to_numeric)
+    return pd.concat([cat_df, num_df], axis=1)
+
+
+def get_label_data(df, label_var):
+    '''separate label from a dataframe'''
+    df_label = df[label_var]
+    return df_label
+
+
 def feature_scale_data(X):
     '''Feature scaled data based on standardization'''
     sc_X = StandardScaler()
     X_std = sc_X.fit_transform(X)
     return X_std
     
-# Plot confusion matrix: accuracy, precision, recall and etc.
+
+def score_model_roc_auc(model, X_train, y_train, X_val, y_val):
+    '''computes the roc_auc score for probability of being a stroke case'''
+    model.fit(X_train, y_train)
+    probs = model.predict_proba(X_val)
+    return skm.roc_auc_score(y_val, probs[:,1])
+
+
+def model_tuning_param(model, feature_df, label_df, param_dist, n_iter):
+    '''performs RandomizedSearchCV to tune model hyper-parameters'''
+    random_search = RandomizedSearchCV(model, param_dist, n_iter, cv=5)
+    random_search.fit(feature_df, label_df)
+    return random_search
+
+
+def print_best_param(random_search, param_1=None, param_2=None, param_3=None, param_4=None):
+    '''print the best model parameter(s)'''
+    print("Best " + param_1 + ":", random_search.best_estimator_.get_params()[param_1])
+    print("Best " + param_2 + ":", random_search.best_estimator_.get_params()[param_2])
+    print("Best " + param_3 + ":", random_search.best_estimator_.get_params()[param_3])
+    print("Best " + param_4 + ":", random_search.best_estimator_.get_params()[param_4])
+
+
+def model_train(model, feature_df, label_df, n_proc, mean_roc_auc, cv_std):
+    '''train a model and output mean roc_auc and CV std.dev roc_auc'''
+    roc_auc = cross_val_score(model, feature_df, label_df, n_jobs=n_proc,
+                               cv=5, scoring='roc_auc')
+    mean_roc_auc[model] = np.mean(roc_auc)
+    cv_std[model] = np.std(roc_auc)    
+
+
+def model_summary(model, mean_roc_auc, cv_std):
+    '''print out the model performances'''
+    print('\nModel:\n', model)
+    print('Average roc_auc:\n', mean_roc_auc[model])
+    print('Std. Dev during CV:\n', cv_std[model])    
+
+
+def compute_confusion_matrix(y_act, y_pred):
+    '''compute sklearn confusion matrix'''
+    cm_model = skm.confusion_matrix(y_act, y_pred)
+    return cm_model  
+
+
 def plot_confusion_matrix(cm, classes):
     '''plot the confusion matrix of trained model'''
     fig, ax = plt.subplots(figsize=(7,7))
@@ -211,51 +240,15 @@ def plot_confusion_matrix(cm, classes):
     plt.xlabel('predicted label')
     plt.ylabel('true label')
 
-# Write report classification metrics summary report
+
 def report_class_summary(model_name, y_act, y_pred):
+    '''Write a classification summary report''' 
     print ('Accuracy of ' + model_name + ' is %0.2f'% skm.accuracy_score(y_act, y_pred))
     print ('Precision of ' + model_name + ' is %0.2f'% skm.precision_score(y_act, y_pred))
     print ('Recall of ' + model_name + ' is %0.2f'% skm.recall_score(y_act, y_pred))
     print ('ROC score of ' + model_name + ' is %0.2f'% skm.roc_auc_score(y_act, y_pred))
-
-# Compute confusion matrix:
-def compute_confusion_matrix(y_act, y_pred):
-    '''compute sklearn confusion matrix'''
-    cm_model = skm.confusion_matrix(y_act, y_pred)
-    return cm_model    
-
-def score_model_roc_auc(model, X_train, y_train, X_val, y_val):
-    '''computes the roc_auc score for probability of being a stroke case'''
-    model.fit(X_train, y_train)
-    probs = model.predict_proba(X_val)
-    return skm.roc_auc_score(y_val, probs[:,1])
-
-def model_tuning_param(model, feature_df, label_df, param_dist, n_iter):
-    '''performs RandomizedSearchCV to tune model hyper-parameters'''
-    random_search = RandomizedSearchCV(model, param_dist, n_iter, cv=5)
-    random_search.fit(feature_df, label_df)
-    return random_search
-
-def print_best_param(random_search, param_1=None, param_2=None, param_3=None, param_4=None):
-    '''print the best model parameter(s)'''
-    print("Best " + param_1 + ":", random_search.best_estimator_.get_params()[param_1])
-    print("Best " + param_2 + ":", random_search.best_estimator_.get_params()[param_2])
-    print("Best " + param_3 + ":", random_search.best_estimator_.get_params()[param_3])
-    print("Best " + param_4 + ":", random_search.best_estimator_.get_params()[param_4])
-
-def model_train(model, feature_df, label_df, n_proc, mean_roc_auc, cv_std):
-    '''train a model and output mean roc_auc and CV std.dev roc_auc'''
-    roc_auc = cross_val_score(model, feature_df, label_df, n_jobs=n_proc,
-                               cv=5, scoring='roc_auc')
-    mean_roc_auc[model] = np.mean(roc_auc)
-    cv_std[model] = np.std(roc_auc)    
-
-def model_summary(model, mean_roc_auc, cv_std):
-    '''print out the model performances'''
-    print('\nModel:\n', model)
-    print('Average roc_auc:\n', mean_roc_auc[model])
-    print('Std. Dev during CV:\n', cv_std[model])    
-
+    
+    
 def model_results(model, mean_roc_auc, predictions, feature_importances):
     '''saves the model name, mean_roc_auc, predicted rate, and feature importances'''
     with open('model.txt', 'w') as file:
@@ -263,208 +256,161 @@ def model_results(model, mean_roc_auc, predictions, feature_importances):
         feature_importances.to_csv('feat_importances.csv')
         predictions.to_csv('pred_results_best.csv', index=False)
     
-# --- 3. Load the data --- #
+
+# --- 2. Load the data --- #
+# define input CSVs:
 if __name__ == '__main__':
-# Define input CSVs:
     train_file = 'stroke_train.csv'
     test_file = 'stroke_test.csv'
-
-# Define type of variables list:
-#df_train.select_dtypes(include='object').columns
-cat_vars = ['gender', 'ever_married', 'work_type', 'Residence_type', 'smoking_status']
-
-#df_train.select_dtypes(include='int64').columns
-#df_train.select_dtypes(include='float64').columns
-num_vars = ['hypertension', 'heart_disease', 'age', 'avg_glucose_level', 'bmi']
-label_var = 'stroke'
-
-# Define variables to drop
-list_vars = 'id'
 
 # Load data
 df_train = load_file(train_file)
 df_test = load_file(test_file)
 
-# Check the metadata of dataframe:
+# define variables:
+cat_vars = ['gender', 'ever_married', 'work_type', 'Residence_type', 'smoking_status']
+num_vars = ['age', 'avg_glucose_level', 'bmi']
+label_var = 'stroke'
+
+# check data types on dataframes:
 df_train.info()
 
-# Create a label dataframe:
+
+# --- 3. ETL - metadata format --- #
+
+
+# --- 4. ETL - merging/subsetting data --- #
+# create a dataframe with label:
 df_label = df_train[['id', 'stroke']]
 
-# Drop a column by index: poverty_rate
-df_train = drop_column_by_index(df_train, label_var)
+# drop a specified column:
+df_train = drop_column(df_train, label_var)
 
-# join train set and label:
-train_raw_df = join_data(df_train, df_label, key='id')
+# merge on a train set and label:
+train_raw_df = join_data(df_train, df_label, 'inner', key='id')
 
-# --- 4. Perform data cleaning and quality check --- #
-# Clean invalid data and duplicates: train and test set
+# --- 5. ETL - cleaning data --- #
+# clean data:
 clean_train_df = shuffle(clean_data(train_raw_df)).reset_index(drop=True)
 clean_test_df = shuffle(clean_data(df_test)).reset_index(drop=True)
+del (df_train, df_test)
 
-del (train_raw_df, df_test)
-
-clean_train_df = drop_column_by_index(clean_train_df, list_vars)
-
-# Compute missing value % on a dataframe:
-missing_df_train = eda_missing_data(clean_train_df)
-missing_df_test = eda_missing_data(clean_test_df)
-
-# --- 5. Explore the data (EDA) --- # 
-# Compute summary statistics
-df_stat_num = eda_summary_stat_num(clean_train_df[num_vars])
-df_stat_cat = eda_summary_stat_cat(clean_train_df)
-
-# save row_id from test set:
+# create a dataframe: test set 'id'
 df_test_id = clean_test_df['id']
-clean_test_df = drop_column_by_index(clean_test_df, list_vars)
 
-## Check 3: handling outliers using IQR #
-################################################################################
-## Compute IQR, LB, UB:        
-#df_outliers = compute_outliers(df_stat_num)
-
-# Correlation matrix plot # 
-###########################
-df_EDA = clean_train_df.copy()
-df_EDA = drop_column_by_index(df_EDA, cat_vars)
-
-# Plot correlation matrix
-EDA_plot_correlation(df_EDA)
-
-# Compute the correlation of each feature against poverty rate: order of magnitude
-CM_summary = df_EDA.corr().sort_values(by=['stroke'], ascending=False)['stroke']
-print(CM_summary)
-
-# --- 6. Feature encode on categorical variables --- #
-# Mapping ordinal and nominal features to integer:
-smoking_status_map = {'never smoked':0, 'formerly smoked':1, 'smokes':2}
+# --- 6. Feature Encoding --- #
+# mapping nominal features into an integer:
+#smoking_status_map = {'never smoked':0, 'formerly smoked':1, 'smokes':2}
 hypertension_map = {0:'No', 1:'Yes'}    
 heart_disease_map = {0:'No', 1:'Yes'}
 
-# Encode features into to mapping values: train set
-clean_train_df['smoking_status'] = encode_categorical_feature(clean_train_df, 'smoking_status', smoking_status_map)
+# encode features on a train set:
 clean_train_df['hypertension'] = encode_categorical_feature(clean_train_df, 'hypertension', hypertension_map)
 clean_train_df['heart_disease'] = encode_categorical_feature(clean_train_df, 'heart_disease', heart_disease_map)
 
-# Encode features into to mapping values: test set
-clean_test_df['smoking_status'] = encode_categorical_feature(clean_test_df, 'smoking_status', smoking_status_map)
+# encode features on a test set:
 clean_test_df['hypertension'] = encode_categorical_feature(clean_test_df, 'hypertension', hypertension_map)
 clean_test_df['heart_disease'] = encode_categorical_feature(clean_test_df, 'heart_disease', heart_disease_map)
 
-clean_train_df.isnull().sum()
-clean_test_df.isnull().sum()
+# --- 7. Feature Imputation --- #
+# check missing: before imputation
+df_missing_pre = EDA_missing_data(clean_train_df)
+df_missing_pre
 
-# --- 7. Feature imputation via univariate techniques --- #    
-# Split data into input features and target variable #
-X_train, y_train = split_dataframe(clean_train_df)
-X_test = clean_test_df.copy()
+# feature imputation:
+feature_replacement(clean_train_df)
+feature_replacement(clean_test_df)
 
+# check missing: after imputation
+df_missing_post = EDA_missing_data(clean_train_df)
+df_missing_post
+del(df_missing_pre, df_missing_post)
+
+# --- 8. Feature Engineering --- #
+# average age by categorical variables:
+df_avg_age_by_hypertension = avg_groupby_data(clean_train_df, 'age', 'hypertension', 'avg_age_hypertension')
+df_avg_age_by_heart_disease = avg_groupby_data(clean_train_df, 'age', 'heart_disease', 'avg_age_heart_disease')
+df_avg_age_by_gender = avg_groupby_data(clean_train_df, 'age', 'gender', 'avg_age_gender')
+df_avg_age_by_work_type = avg_groupby_data(clean_train_df, 'age', 'work_type', 'avg_age_work_type')
+df_avg_age_by_marital_status = avg_groupby_data(clean_train_df, 'age', 'ever_married', 'avg_age_marital_status')
+
+# perform left joins on avg grouped dataframes:
+clean_train_df = join_data(clean_train_df, df_avg_age_by_hypertension, 'left', key='hypertension')
+clean_train_df = join_data(clean_train_df, df_avg_age_by_heart_disease, 'left', key='heart_disease')
+clean_train_df = join_data(clean_train_df, df_avg_age_by_gender, 'left', key='gender')
+clean_train_df = join_data(clean_train_df, df_avg_age_by_work_type, 'left', key='work_type')
+clean_train_df = join_data(clean_train_df, df_avg_age_by_marital_status, 'left', key='ever_married')
+
+clean_test_df = join_data(clean_test_df, df_avg_age_by_hypertension, 'left', key='hypertension')
+clean_test_df = join_data(clean_test_df, df_avg_age_by_heart_disease, 'left', key='heart_disease')
+clean_test_df = join_data(clean_test_df, df_avg_age_by_gender, 'left', key='gender')
+clean_test_df = join_data(clean_test_df, df_avg_age_by_work_type, 'left', key='work_type')
+clean_test_df = join_data(clean_test_df, df_avg_age_by_marital_status, 'left', key='ever_married')
+
+# --- 9. Exploratory Data Analysis --- #
+# convert data type as category:
+convert_dt_as_category(clean_train_df)
+convert_dt_as_category(clean_test_df)
+
+# perform summary statistics: numerical
+df_stat_num = EDA_summary_stat_num(clean_train_df[num_vars])
+df_stat_num
+
+# perform summary statistics: categorical
+df_stat_cat = EDA_summary_stat_cat(clean_train_df)
+df_stat_cat
+
+# --- 10. Prepare Training Data --- #
+# list of categorical and numerical features:
+cat_feat = list(clean_test_df.select_dtypes(include='category').columns)
+num_feat = list(clean_train_df.select_dtypes(include='float64').columns)
+
+# one-hot encoding and concatenate numerical & categorical:
+feature_df = one_hot_encode_feature(clean_train_df, cat_vars=cat_feat, num_vars=num_feat)
+test_df = one_hot_encode_feature(clean_test_df, cat_vars=cat_feat, num_vars=num_feat)
+
+# retrieve a label: stroke
+label_df = get_label_data(clean_train_df, label_var)
+
+# delete dataframes:
 del(clean_train_df, clean_test_df)
 
-# check input features and target variable: train and test sets
-print(X_train.head(), y_train.head())
-
-# Imputation by mode, mean and median: train and test sets
-indices_1 = range(8,9)
-indices_2 = range(9,10)
-
-# impute bmi and smoking_status by univariate methods: train and test sets
-X_train.iloc[:, indices_1] = feature_imputer(X_train, 'NaN', 'median', indices_1)
-X_train.iloc[:, indices_2] = feature_imputer(X_train, 'NaN', 'most_frequent', indices_2)
-
-X_test.iloc[:, indices_1] = feature_imputer(X_test, 'NaN', 'median', indices_1)
-X_test.iloc[:, indices_2] = feature_imputer(X_test, 'NaN', 'most_frequent', indices_2)
-
-# concatenated imputed inputs and output label:
-imputed_train_df = pd.concat([X_train, y_train], axis=1)
-imputed_test_df = X_test.copy()
-
-del(X_train, y_train, X_test)
-
-# convert smoking_status back to original string:
-inv_smoking_status_map = {key:value for value, key in smoking_status_map.items()}
-imputed_train_df['smoking_status'] = encode_categorical_feature(imputed_train_df, 'smoking_status', inv_smoking_status_map)
-imputed_test_df['smoking_status'] = encode_categorical_feature(imputed_test_df, 'smoking_status', inv_smoking_status_map)
-
-# check any missing values on imputed df:
-imputed_train_df.isnull().sum()
-imputed_test_df.isnull().sum()
-
-# check cleaned dataframe: data types
-imputed_train_df.dtypes
-imputed_test_df.dtypes
-
-# Save feature_df for EDA portfolio:
-#imputed_train_df.head()
-#df_eda_stroke = imputed_train_df.copy()
-#df_eda_stroke.to_csv('df_eda_stroke.csv', index=False)
-
-# --- 8. Feature engineering: groupby categorical var ---
-
-# convert data types for correct metadata: train and test sets
-imputed_train_df['gender'] = convert_data_type(imputed_train_df, 'gender', 'category')
-imputed_train_df['hypertension'] = convert_data_type(imputed_train_df, 'hypertension', 'category')
-imputed_train_df['heart_disease'] = convert_data_type(imputed_train_df, 'heart_disease', 'category')
-imputed_train_df['ever_married'] = convert_data_type(imputed_train_df, 'ever_married', 'category')
-imputed_train_df['work_type'] = convert_data_type(imputed_train_df, 'work_type', 'category')
-imputed_train_df['Residence_type'] = convert_data_type(imputed_train_df, 'Residence_type', 'category')
-imputed_train_df['smoking_status'] = convert_data_type(imputed_train_df, 'smoking_status', 'category')
-
-# --- 9. One-hot-encode on features --- # 
-# Drop first dummy variable to avoid dummy variable trap on each converted feature!
-num_vars2 = list(imputed_train_df.select_dtypes(include='float64').columns)
-cat_vars2 = list(imputed_train_df.select_dtypes(include='category').columns)
-
-feature_df = one_hot_encode_feature(imputed_train_df, cat_vars=cat_vars2, num_vars=num_vars2)
-test_df = one_hot_encode_feature(imputed_test_df, cat_vars=cat_vars2, num_vars=num_vars2)
-
-# List total number of encoded inputs and output:
-feature_df.isnull().sum()
-test_df.isnull().sum()
-
-# Compute label: stroke
-label_df = get_label_data(imputed_train_df, label_var)
-#del(imputed_train_df, imputed_test_df)
-
-# --- 10. Compute Proportion (%) of Stroke --- # 
-df_feature_train = pd.concat([feature_df, label_df], axis=1)
-df_stroke_pct = pd.DataFrame(df_feature_train.groupby('stroke')['age'].count())
-df_stroke_pct.columns=['count']
-df_stroke_pct['pct'] = (df_stroke_pct['count']/len(df_feature_train))*100
-
-df_stroke_pct['pct'].plot(kind='pie', labels=['non-stroke','stroke'],
-                         colors=['green','red'], autopct='%1.0f%%')
-
-# --- 11. Resampling on non-stroke patients by non-stroke patients proportion --- # 
-# --- SMOTE: oversample on minority class label --- #
-X_train, X_val, y_train, y_val = train_test_split(feature_df, label_df, test_size=.1,
+# --- 11. split data into train and test set --- # 
+X_train, X_val, y_train, y_val = train_test_split(feature_df, label_df, test_size=.3,
                                                     random_state=0, stratify=label_df)
 
+# --- SMOTE: oversample on minority class label --- #
 sm = SMOTE(random_state=0, ratio='minority', n_jobs=-1)
 X_train_resampled, y_train_resampled = sm.fit_sample(X_train, y_train)
 
+# count rows on resampled label:
 pd.value_counts(y_train_resampled)
 
 # --- 12. Feature seleciton: Feature Importance --- # 
-# --- 13. Establish a baseline model --- # 
+# Establish a baseline model:
 baseline = RandomForestClassifier(n_estimators=100, n_jobs=-1)
 baseline.fit(X_train_resampled, y_train_resampled)
 
+# Make predicted probabilities:
 probs = baseline.predict_proba(X_val)
-predictions = baseline.predict(X_val)
+#predictions = baseline.predict(X_val)
 
-skm.roc_auc_score(y_val, probs[:,1]) # probabilities on 'stroke' cases only
+# compute a roc_auc score on stroke cases only:
+skm.roc_auc_score(y_val, probs[:,1]) 
 
+# basline predictions: test results
 test_probs = baseline.predict_proba(test_df)
+
+# save a dataframe: test results
 results = pd.DataFrame({'id':df_test_id,
                         'stroke':test_probs[:,1]})
-results.to_csv('prob_results_baseline.csv', index=False, index_label=None)
+    
+results.to_csv('test_baseline.csv', index=False, index_label=None)
 
 ############################
 # Part 3 - DEVELOP PHASE ###
 ############################
-# --- 14. Create models --- # 
+# --- 13. create models --- # 
 # initialize model list and dicts
 models = []
 mean_roc_auc = {}
@@ -550,46 +496,36 @@ param_4 = 'learning_rate'
 print_best_param(random_search_xgb, param_1, param_2, param_3, param_4)
 ###############################################################################    
 
-# --- 15. Cross-validate models --- # 
-# 5-fold cross validation on models and measure MSE
-# Model List to train: Order of Model Complexity
-lr = LogisticRegression(tol=2.9078e-05, C=48, penalty='l1', solver='liblinear')
-tree = DecisionTreeClassifier(max_depth=30, min_samples_split=4, min_samples_leaf=2,
-                              max_features=9, random_state=0)
-forest = RandomForestClassifier(n_estimators=87, max_depth=96, min_samples_split=4,
-                                min_samples_leaf=2, random_state=0) 
-xgb = XGBClassifier(n_estimators=79, max_depth=72, colsample_bytree=0.7970211308756587,
-                    learning_rate=0.07492066671304065, random_state=0)
-# List of classifiers:
+# --- 14. cross-validate models --- # 
+# a list of models to train: 5 fold cross-validation
+lr = LogisticRegression(tol=8.41617e-05, C=27, penalty='l1', solver='liblinear')
+tree = DecisionTreeClassifier(max_depth=58, min_samples_split=2, min_samples_leaf=2,
+                              max_features=8, random_state=0)
+forest = RandomForestClassifier(n_estimators=54, max_depth=21, min_samples_split=8,
+                                min_samples_leaf=3, random_state=0) 
+xgb = XGBClassifier(n_estimators=96, max_depth=24, colsample_bytree=0.72538,
+                    learning_rate=0.2392, random_state=0)
+
+# a list of classifiers:
 models.extend([lr, tree, forest, xgb])
 
-# cross-validate models, using MSE to evaluate and print the summaries
+# cross-validate models, using roc_auc to evaluate and print the summaries
 print('begin cross-validation')
 for model in models:
     model_train(model, X_train_resampled, y_train_resampled, n_proc, mean_roc_auc, cv_std)
     model_summary(model, mean_roc_auc, cv_std)
 
-# --- 16. Select the best model with lowest RMSE for your prediction model --- #
+# --- 15. select the best model --- #
 model = max(mean_roc_auc, key=mean_roc_auc.get)
 print('\nBest model with the highest mean roc_auc:')
 print(model)
 
-# --- 17. Compute roc_auc score on "stroke cases only!" --- #
-###############################################################################
-score_model_roc_auc(lr, X_train_resampled,
-                    y_train_resampled, X_val, y_val)
+# --- compute a roc_auc score on "stroke cases" --- #
+#score_model_roc_auc(lr, X_train_resampled,
+#                    y_train_resampled, X_val, y_val)
 
-score_model_roc_auc(xgb, X_train_resampled,
-                    y_train_resampled, X_val.values, y_val)
-
-score_model_roc_auc(tree, X_train_resampled,
-                    y_train_resampled, X_val, y_val)
-
-score_model_roc_auc(forest, X_train_resampled,
-                    y_train_resampled, X_val, y_val)
-
-# --- 18. Model Evaluation: Confusion Matrix, Classification Metrics ---    
-# Save cross-validated predictions:
+# --- 16. Model Evaluation ---    
+# compute predictions by a model:
 lr.fit(X_train_resampled, y_train_resampled)
 y_pred_lr = lr.predict(X_val)
 
@@ -602,7 +538,7 @@ y_pred_forest = forest.predict(X_val)
 xgb.fit(X_train_resampled, y_train_resampled)
 y_pred_xgb = xgb.predict(X_val.values)
 
-# Compute a series of confusion matrix by model:
+# compute confusion matrices by a model:
 cm_lr = compute_confusion_matrix(y_val, y_pred_lr)
 
 cm_tree = compute_confusion_matrix(y_val, y_pred_tree)
@@ -617,7 +553,7 @@ class_labels = np.array(['non-stroke', 'stroke'], dtype=str)
 #####################################################
 # Confusion Matrix & Classification Metrics Summary #
 #####################################################
-# --- Logistic Regression ---#
+# --- Model 1 --- #
 # Plot a confusion matrix: 
 plot_confusion_matrix(cm_lr, class_labels)
 plt.title('Normalized Confusion Matrix: Logistic Regression')
@@ -626,7 +562,7 @@ plt.show()
 # Report classification metrics summary:
 report_class_summary('Logistic Regression', y_val, y_pred_lr)
 
-# --- Decision Tree ---#
+# --- Model 2 --- #
 # Plot a confusion matrix: 
 plot_confusion_matrix(cm_tree, class_labels)
 plt.title('Normalized Confusion Matrix: Decision Tree')
@@ -635,7 +571,7 @@ plt.show()
 # Report classification metrics summary:
 report_class_summary('Decision Tree', y_val, y_pred_tree)
 
-# --- Random Forest ---#
+# --- Model 3 --- #
 # Plot a confusion matrix: 
 plot_confusion_matrix(cm_forest, class_labels)
 plt.title('Normalized Confusion Matrix: Random Forest')
@@ -644,7 +580,7 @@ plt.show()
 # Report classification metrics summary:
 report_class_summary('Random Forest', y_val, y_pred_forest)
 
-# --- XGBoost Classifier ---#
+# --- Model 4 --- #
 # Plot a confusion matrix: 
 plot_confusion_matrix(cm_xgb, class_labels)
 plt.title('Normalized Confusion Matrix: XGBoost')
@@ -653,13 +589,13 @@ plt.show()
 # Report classification metrics summary:
 report_class_summary('XGBoost', y_val, y_pred_xgb)
 
-# --- 19. Model Evaluation: ROC-AUC Curve, Precision-Recall Curve --- 
+# --- 17. Model Plotting --- 
+# ROC for each classifiers
 clf_labels = ['Logistic Regression', 'Decision Tree', 'Random Forest', 'XGBoost']
 all_clf = [lr, tree, forest, xgb]
 
-# plot a ROC-AUC curve
+# plot a ROC_AUC curve:
 plt.figure(figsize=(8,8))
-# ROC for each classifiers
 colors = ['green', 'blue', 'orange', 'red']
 linestyles = ['-', ':', ':', ':'] 
 for clf, label, clr, ls \
@@ -681,13 +617,12 @@ plt.ylabel('True Positive Rate')
 plt.legend(loc='lower right', prop={'size': 15})
 plt.show()
 
-# plot a Precision-Recall curve
 # compute avg. precision score:
 y_score_lr = lr.fit(X_train_resampled, y_train_resampled).predict_proba(X_val.values)[:,1]
 avg_precision = skm.average_precision_score(y_val, y_score_lr)
 print('Average P-R score of Logistic Regression: {0:0.2f}'.format(avg_precision))
 
-# Plot a P-R curve:
+# plot a P-R curve:
 precision, recall, _ =skm.precision_recall_curve(y_val, y_score_lr)
 plt.step(recall, precision, color='navy', where='post', label='Precision-Recall Curve')
 plt.title('P-R Curve: LogisiticRegression [test set] AP={0:0.2f}'.format(avg_precision))
@@ -701,17 +636,16 @@ plt.show()
 ###########################
 # Part 4 - DEPLOY PHASE ###
 ###########################
-# --- 20. Automate the model pipeline --- #
-# make predictions based on a test set
-df_test_selected = test_df.copy()
-df_pred_probs = lr.predict_proba(df_test_selected)
+# --- 18. automate the model pipeline --- #
+# make predictions on a test set:
+df_pred_probs = lr.predict_proba(test_df)
 
 # make predictions dataframe:
 results = pd.DataFrame({'id':df_test_id,
                         'stroke':df_pred_probs[:,1]})
 results.to_csv('prob_results_lr.csv', index=False, index_label=None)
 
-# --- 21. Deploy the solution --- #
+# --- 19. deploy the solution --- #
 #store feature importances
 if hasattr(model, 'feature_importances_'):
     importances = model.feature_importances_
@@ -719,19 +653,41 @@ else:
 # linear models don't have feature_importances_
     importances = [0]*len(X_train.columns)
 
-# Create a feature importance dataframe and sort by importance:    
+# sort a dataframe by feature importance score: 
 feature_importances = pd.DataFrame({'feature':X_train.columns,
                                         'importance':importances})
 feature_importances.sort_values(by='importance', inplace=True, ascending=False)
 
-# Set index to 'feature'
+# set index to 'feature'
 feature_importances.set_index('feature', inplace=True, drop=True)
 
-# Create a bar plot:    
+# create a bar plot:    
 feature_importances[0:15].plot.bar(align='center')
 plt.xticks(rotation=270, fontsize=9)
 plt.title('feature importance plot: best trained classifier')
 plt.show()
     
-#Save model results as .csv file:
+# save model results as .csv file:
 model_results(model, mean_roc_auc[model], results, feature_importances)
+
+
+##################
+# Discretization #
+##################
+## define bins and labels: overweight and diabetic statuses
+#bins_overweight = [0, 18.5, 25, 30, max(clean_train_df.bmi)]
+#label_overweight = ['1_Underweight', '2_Normal', '3_Overweight', '4_Obese'] 
+#
+#bins_diabetic = [0, 200, 230, max(clean_train_df.avg_glucose_level)]
+#label_diabetic = ['1_Normal', '2_Pre-Diabetic', '3_Diabetic'] 
+#
+## create a feature: on a train set
+#clean_train_df['overweight_status'] = apply_binning(clean_train_df, 'overweight_status', 'bmi', 
+#                                                   bins_overweight, label_overweight)
+#clean_train_df['diabetic_status'] = apply_binning(clean_train_df, 'diabetic_status', 'avg_glucose_level', 
+#                                                   bins_diabetic, label_diabetic)
+## create a feature: on a test set
+#clean_test_df['overweight_status'] = apply_binning(clean_test_df, 'overweight_status', 'bmi', 
+#                                                   bins_overweight, label_overweight)
+#clean_test_df['diabetic_status'] = apply_binning(clean_test_df, 'diabetic_status', 'avg_glucose_level', 
+#                                                   bins_diabetic, label_diabetic)

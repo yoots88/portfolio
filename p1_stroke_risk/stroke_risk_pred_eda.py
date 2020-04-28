@@ -3,13 +3,21 @@ import os
 os.getcwd()
 
 # Set path:
-#path = 'D:/P_Poverty_Prediction/A. Coding'
-path = 'D:/TY Workspace/3. Data Science Portfolio/1. Completed Portfolios/p1_stroke_risk/A. Coding'
+path = 'D:/TY Workspace/3. Data Science Portfolio/1. Completed Portfolios/P1_Stroke_Risk_Stratification/A. Coding'
 os.chdir(path)
 
 # Import all libraries #
+from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
+import csv
+from sklearn.utils import shuffle
+from sklearn.preprocessing import StandardScaler, Imputer
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_samples, silhouette_score
+from sklearn.decomposition import PCA
+import scipy.cluster.hierarchy as sch
+import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import seaborn as sns
 plt.style.use('ggplot')
@@ -18,579 +26,364 @@ plt.style.use('ggplot')
 __author__ = "Taesun Yoo"
 __email__ = "yoots1988@gmail.com"
 
-# --- 2. Write Out List of Functions --- #
 #################################
 # Part 2 - Discover the Problem #
 #################################
-# Write a group of funtions:
+# --- 1. Write Out List of Functions --- #
 def load_file(file):
     '''load input CSVs as a dataframe'''
-    return pd.read_csv(file)
+    return pd.read_csv(file, encoding='latin1')
 
-def clean_data(raw_df):
-    '''remove rows that contain invalid data or duplicate IDs'''
-    clean_df = raw_df.drop_duplicates(subset='id')
-    return clean_df
 
-def EDA_missing_data(cleaned_df):
-    '''Performs missing % on each column '''
-    missing_df = cleaned_df.isnull().sum()
-    missing_df = pd.DataFrame(missing_df, columns=['count'])
-    missing_df['pct'] = missing_df['count']/len(cleaned_df)
-    missing_df = missing_df.sort_values(by='pct', ascending=False)
-    return missing_df
+def convert_dt_as_date(df, var_name, date_format):
+    '''convert the variable as specified date format'''
+    df[var_name] = pd.to_datetime(df[var_name], format=date_format)
+    return df[var_name]
 
-def EDA_numerical_data(cleaned_df):
-    '''Computes summary statistics on numerical data'''
-    summary_df_num = cleaned_df.describe(include='all').T
-    summary_df_num = pd.DataFrame(summary_df_num)[['count', 'std', 'min', 'mean', 'max', '25%', '50%', '75%']]
-    return summary_df_num
 
-def EDA_categorical_data(cleaned_df):
-    '''Computes summary statitics on categorical data'''
-    summary_df_cat = cleaned_df.describe(include=['O'])
-    summary_df_cat = pd.DataFrame(summary_df_cat)
-    return summary_df_cat
-    
-def EDA_pivot_table(cleaned_df, cat_var, num_var):
-    '''Creates a pivot table based on categorical var and average numerical var'''
-    pivot_cat_df = cleaned_df.pivot_table(index=cat_var, values=num_var, aggfunc=np.mean)
-    pivot_cat_df.reset_index(level=0, inplace=True)
-    pivot_cat_df.rename(columns={cat_var:cat_var, num_var:"avg" + "_" + num_var + "_" + cat_var}, inplace=True)
-    return pivot_cat_df
+def convert_dt_as_custom(df, var_name, dt_type):
+    '''convert datatype on selected variables'''
+    df[var_name] = df[var_name].astype(dt_type)
+    return df[var_name]
 
-def EDA_plot_num_var(df, num_var):
-    '''plot a boxplot and distribution plot for numerical variable'''
-    plt.figure(figsize=(14,7))
-    plt.subplot(1,2,1)
-    sns.boxplot(df[num_var])
-    plt.subplot(1,2,2)
-    sns.distplot(df[num_var], bins=20)
-    plt.show()
-    
-def EDA_plot_mean_label_barchart(df, num_var1, num_var2, num_var3,
-                                 label, lab_list, lab_name):
-    '''plot 1 by 3 average numerical bar charts categorized by stroke labels'''
-    plt.figure(figsize=(10,5))
-    plt.subplots_adjust(wspace=1.0)
-    # 1st plot factored by a stroke label:
-    plt.subplot(1,3,1)
-    df.groupby(label)[num_var1].mean().sort_values(ascending=False).plot(kind='bar')
-    plt.xticks(lab_list, lab_name, rotation=0, fontsize=12)
-    plt.xlabel('stroke conditions')
-    plt.ylabel('Mean ' + num_var1)
-    plt.title('Mean ' + num_var1 + ' by stroke conditions', fontsize=12)
-    # 1st plot factored by a stroke label:
-    plt.subplot(1,3,2)
-    df.groupby(label)[num_var2].mean().sort_values(ascending=False).plot(kind='bar')
-    plt.xticks(lab_list, lab_name, rotation=0, fontsize=12)
-    plt.xlabel('stroke conditions')
-    plt.ylabel('Mean ' + num_var2)
-    plt.title('Mean ' + num_var2 + ' by stroke conditions', fontsize=12)
-    # 1st plot factored by a stroke label:
-    plt.subplot(1,3,3)
-    df.groupby(label)[num_var3].mean().sort_values(ascending=False).plot(kind='bar')
-    plt.xticks(lab_list, lab_name, rotation=0, fontsize=12)
-    plt.xlabel('stroke conditions')
-    plt.ylabel('Mean ' + num_var3)
-    plt.title('Mean ' + num_var3 + ' by stroke conditions', fontsize=12)
 
-def EDA_plot_mean_cat_barchart(df, num_var, cat_var1, cat_var2, cat_var3, cat_var4):
-    '''plot 2 by 2 average numerical bar charts categorized by categorical variables'''
-    plt.figure(figsize=(10,10))
-    plt.subplots_adjust(hspace=1, wspace=1)
-    # 1st plot
-    plt.subplot(2,2,1)
-    df.groupby(cat_var1)[num_var].mean().sort_values(ascending=False).plot(kind='bar')
-    plt.xlabel(cat_var1)
-    plt.ylabel('Mean ' + num_var)
-    plt.title('Mean ' + num_var + ' stroke patients by '+ cat_var1)
-    # 2nd plot
-    plt.subplot(2,2,2)
-    df.groupby(cat_var2)[num_var].mean().sort_values(ascending=False).plot(kind='bar')
-    plt.xlabel(cat_var2)
-    plt.ylabel('Mean ' + num_var)
-    plt.title('Mean ' + num_var + ' stroke patients by '+ cat_var2)
-    # 3rd plot
-    plt.subplot(2,2,3)
-    df.groupby(cat_var3)[num_var].mean().sort_values(ascending=False).plot(kind='bar')
-    plt.xlabel(cat_var3)
-    plt.ylabel('Mean ' + num_var)
-    plt.title('Mean ' + num_var + ' stroke patients by '+ cat_var3)
-    # 4th plot
-    plt.subplot(2,2,4)
-    df.groupby(cat_var4)[num_var].mean().sort_values(ascending=False).plot(kind='bar')
-    plt.xlabel(cat_var4)
-    plt.ylabel('Mean ' + num_var)
-    plt.title('Mean ' + num_var + ' stroke patients by '+ cat_var4)    
-    
-def EDA_plot_hist_label(df, num_var, cat_var, bins, lab_list):
-    '''split dataframe by category and plot a histogram'''
-    for i in lab_list:
-        df_by_label = df[num_var][df[cat_var] == i]
-        plt.hist(df_by_label, bins=bins, label=i)
-        plt.title('Histogram of ' + str(num_var))
-        plt.xlabel(str(num_var))
-        plt.ylabel('# of patients')                   
-
-def EDA_plot_hist_3by1(df, 
-                       var1, bin1, lab1, 
-                       var2, bin2, lab2, 
-                       var3, bin3, lab3,
-                       factor=None):
-    '''Print skewness and plot the histogram'''
-    plt.figure(figsize=(8,8))
-    plt.subplots_adjust(hspace=1/2, wspace=1/2)
-    #subplot 1:
-    print("Skewness is:" + lab1, df[var1].skew())
-    plt.subplot(3,1,1)
-    plt.hist(df[var1]*factor, color='green', bins=bin1)
-    plt.title('Histogram of '+ lab1)
-    plt.xlabel(lab1)
-    plt.ylabel('# of patients')
-    #subplot 2:
-    print("Skewness is:" + lab2, df[var2].skew())
-    plt.subplot(3,1,2)
-    plt.hist(df[var2]*factor, color='blue', bins=bin2)
-    plt.title('Histogram of '+ lab2)
-    plt.xlabel(lab2)
-    plt.ylabel('# of patients')
-    #subplot 3:
-    print("Skewness is:" + lab3, df[var3].skew())
-    plt.subplot(3,1,3)
-    plt.hist(df[var3]*factor, color='cyan', bins=bin3)
-    plt.title('Histogram of '+ lab3)
-    plt.xlabel(lab3)
-    plt.ylabel('# of patients')
-
-def split_data_by_label(df, label):
-    '''set label as an index and split dataframe by an index'''
-    df_label = df.set_index(label)
-    df_label_1, df_label_0 = df_label.loc[1], df_label.loc[0]
-    return (df_label_1, df_label_0)
-
-def split_groupby_data(df,label,cat_var):
-    '''Grouped dataframe using a label and categorical varialbe
-        then split a dataframe by label(s)'''
-    df_grp = pd.DataFrame(df.groupby([label,cat_var])[cat_var].count())
-    df_grp.columns = ['count']
-    df_grp_0 = df_grp.loc[0]
-    df_grp_1 = df_grp.loc[1]
-    return(df_grp_0, df_grp_1)
-
-def plot_pie_charts(df_grp_0, df_grp_1, label, var_name, color):
-    '''Plot a set of pie charts for non-stroke/stroke cases'''
-    f, (ax1, ax2) = plt.subplots(1,2, figsize=(10,5))
-    plt.subplots_adjust(hspace=0.5, wspace=0.5)
-    # subplot for non-stroke:
-    ax1.pie(df_grp_0, colors=color, autopct='%.0f%%',
-            wedgeprops={'edgecolor':'white'}, textprops={'fontsize':14})
-    ax1.set_title('Non-stroke patients ' + var_name, fontsize=13)
-    ax1.legend(labels = label, loc='upper right')
-    # subplot for stroke:
-    ax2.pie(df_grp_1, colors=color, autopct='%.0f%%',
-            wedgeprops={'edgecolor':'white'}, textprops={'fontsize':14})
-    ax2.set_title('Stroke patients ' + var_name, fontsize=13)
-    ax2.legend(labels = label, loc='upper right')
-    
-def EDA_plot_freq_chart(df, cat_var, var_name):
-    '''computes frequency count chart'''
-    cat_var_count = df[cat_var].value_counts()
-    sns.barplot(cat_var_count.index, cat_var_count.values, alpha=0.9)
-    plt.title('Frequency Counts of '+ var_name)
-    plt.ylabel('Counts')
-    plt.xlabel(var_name, fontsize=10)
-    plt.xticks(rotation=270)
-    plt.show()
-
-def EDA_plot_bar(cleaned_df, cat_var, num_var, color):
-    '''Plots the bar chart'''
-    cleaned_df.plot.bar(color=color)
-    plt.xlabel(cat_var)
-    plt.ylabel('Avg. ' + num_var)
-    plt.xticks(rotation=0)
-    plt.show()    
-
-def EDA_plot_box_whisker(df, num_var, cat_var, hue=None):
-    '''plot the box-whisker plot'''
-    df.sort_values(by=[num_var, cat_var], ascending=False, inplace=True)
-    plt.figure()
-    sns.set(style='whitegrid')
-    sns.boxplot(cat_var, num_var, hue, df)
-    plt.title('Box Plot of '+ num_var + ' by '+ cat_var)
-    plt.xticks(rotation=270, fontsize=9)
-
-def EDA_convert_object_to_cat(df):
-    '''convert data type object to category'''
+def convert_dt_to_cat(df):
+    '''convert data type to category'''
     for col in df.columns:
-        if df[col].dtype.name == "object":
+        if df[col].dtype.name == 'object':
             df[col] = df[col].astype('category')
 
-def EDA_encode_cat_var(df, col, num_var):
-    '''encode the categorical variables using a specified numerical variable for each category '''
+
+def eda_encode_cat_var(df, col, num_var):
+    '''encode the cat. variables by mean of a num. variable by each cat'''
     cat_dict={}
     cats = df[col].cat.categories.tolist()
     for cat in cats:
         cat_dict[cat] = df[df[col] == cat][num_var].mean()
     df[col] = df[col].map(cat_dict)
+    
 
-def EDA_plot_corr_matrix(df, features, label):
-    '''plot the correlation matrix'''
-    corr = df[features + label].corr()
-    # Create a mask:
-    mask = np.zeros_like(corr)
-    mask[np.triu_indices_from(mask)] = True
-    plt.figure(figsize=(12,10))
-    sns.heatmap(corr,
-                cmap=sns.diverging_palette(220, 10, as_cmap=True),
-                annot=True, fmt=".2f", mask=mask)
-    plt.xticks(rotation=90)
+def eda_missing(df):
+    '''compute missing % on each var'''
+    df_missing = pd.DataFrame(df.isnull().sum(), columns=['count'])
+    df_missing['pct'] = (df_missing['count']/len(df)) * 100
+    return df_missing
+
+
+def eda_stat_num(df):
+    ''' perform eda for numerical features '''
+    df_stat_num = df.describe().T
+    df_stat_num = df_stat_num[['count', 'min', 'mean', 'max', 'std', '25%', '50%', '75%']]
+    df_stat_num = pd.DataFrame(df_stat_num)
+    return df_stat_num
+
+
+def eda_stat_cat(df):
+    ''' perform eda for categorical features '''
+    df_stat_cat = df.describe(include='category').T
+    df_stat_cat = pd.DataFrame(df_stat_cat)
+    return df_stat_cat
+
+
+def eda_outliers(df):
+    '''check outliers using the IQR method'''
+    df['IQR'] = df['75%'] - df['25%']
+    df['LB']  = df['25%'] - 1.5*df['IQR']
+    df['UB']  = df['75%'] + 1.5*df['IQR']
+    df = df.drop(['count','std','mean','25%','50%','75%','IQR'], axis=1)
+    return df
+
+
+def eda_agg_df_var(df, cat_var, kpi_dict):
+    '''compute aggregated dataframe to calculate the KPIs'''
+    df_agg = df.groupby(by=cat_var).agg(kpi_dict)
+    return df_agg
+
+
+def eda_grouped_df_var(df, cat_var):
+    '''create a grouped dataframe by categorical variable'''
+    df_grp = pd.DataFrame(df.groupby([cat_var])[cat_var].count())
+    df_grp.columns = ['count']
+    return df_grp
+
+
+def plot_hist(df, var_1):
+    '''plot a histogram'''
+    plt.figure()
+    print("skenewss is:", df[var_1].skew())
+    df[var_1].hist(color='green')
+    plt.title('Histogram of ' + var_1)
+    plt.xlabel(var_1)
+    plt.ylabel('patients')
     plt.show()
 
-def EDA_plot_crosstab(df, cat_var1, cat_var2):
-    '''plot a cross-tabulate on two categorical variables'''
-    cross_tab = pd.crosstab(df[cat_var1], df[cat_var2])
-    return cross_tab
 
-def EDA_plot_scatter(df, 
-                     var1, lab1, c1,
-                     var2, lab2, c2, 
-                     factor=None):
-    '''plot 2 by 1 scatter plots'''
-    plt.figure(figsize=(8,8))
-    plt.subplots_adjust(hspace=0.4, wspace=0.9)
-    plt.subplot(2,1,1)
-    plt.scatter(df[var1]*factor, df['age'], color=c1)
-    plt.title('Relationship between ' + lab1 + ' and Age')
-    plt.xlabel(lab1)
-    plt.ylabel('Age')
+def plot_bar_chart(df, var_name_1):
+    '''plot a bar chart'''
+    plt.figure()
+    var_count_1 = df[var_name_1].value_counts()
+    sns.barplot(var_count_1.index,  var_count_1.values, alpha=0.9)
+    plt.title('Frequency chart of ' + var_name_1)
+    plt.ylabel('patients')
+    plt.xlabel(var_name_1)
+    plt.show()
 
-    plt.subplot(2,1,2)
-    plt.scatter(df[var2]*factor, df['age'], color=c2)
-    plt.title('Relationship between '+ lab2 + ' and Age')
-    plt.xlabel(lab2)
-    plt.ylabel('Age')
     
-def Pearson_r(df, x, y):
+def plot_freq_chart(x,y,df,order):
+    '''plot a frequency chart'''
+    plt.figure(figsize=(8,8))
+    sns.countplot(x=x, hue=y, data=df, order=order)
+    plt.title('Bar chart: ' + x + ' of patient group labels', fontsize=20)
+    plt.xticks(rotation=270, fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.xlabel(x, fontsize=12)
+    plt.ylabel('patients', fontsize=12)
+    plt.legend(loc='upper right', fontsize=20)
+    plt.show()
+
+
+def plot_pie_chart(df_1, var_name_1,
+                   df_2, var_name_2):
+    '''plot a pie chart of specified variables'''
+    plt.figure(figsize=(15,15))
+    # Sub-plot 1:
+    plt.subplot(1,2,1)
+    plt.pie(df_1, autopct='%.0f%%', wedgeprops={'edgecolor':'white'},
+            textprops={'fontsize':15})
+    plt.title('Pie Chart of '+ var_name_1)
+    plt.legend(labels = df_1.index, loc='upper right')
+    # Sub-plot 2:
+    plt.subplot(1,2,2)
+    plt.pie(df_2, autopct='%.0f%%', wedgeprops={'edgecolor':'white'},
+            textprops={'fontsize':15})
+    plt.title('Pie Chart of '+ var_name_2)
+    plt.legend(labels = df_2.index, loc='upper right')
+    plt.show()
+    
+
+def plot_box(df, num_var_1, cat_var_1,
+             num_var_2, cat_var_2, hue=None):
+    '''plot a box-whisker of specified variables'''
+    plt.figure(figsize=(15,15))
+    plt.subplots_adjust(hspace=0.5, wspace=0.5)
+    # Sub-plot 1:
+    plt.subplot(1,2,1)
+    df.sort_values(by=[num_var_1], inplace=True)
+    sns.set(style='whitegrid')
+    sns.boxplot(cat_var_1, num_var_1, hue, df)
+    plt.title('Box plot of ' + num_var_1 + ' by ' + cat_var_1)
+    plt.xticks(rotation=270, fontsize=10)
+    # Sub-plot 2:
+    plt.subplot(1,2,2)
+    df.sort_values(by=[num_var_2], inplace=True)
+    sns.set(style='whitegrid')
+    sns.boxplot(cat_var_2, num_var_2, hue, df)
+    plt.title('Box plot of ' + num_var_2 + ' by ' + cat_var_2)
+    plt.xticks(rotation=270, fontsize=10)
+    
+
+def plot_crosstab(df, cat_var_1, cat_var_2):
+    '''plot a crosstab of two categorical variables'''
+    table = pd.crosstab(df[cat_var_1], df[cat_var_2])
+    return table
+
+
+def plot_corr_matrix(df, list_vars):
+    ''' plot a correlation matrix '''
+    corr = df[list_vars].corr()
+    # Create a mask
+    mask = np.zeros_like(corr)
+    mask[np.triu_indices_from(corr)] = True
+    plt.figure(figsize=(8,8))
+    sns.heatmap(corr, cmap=sns.diverging_palette(220,10,as_cmap=True),
+                annot=True, annot_kws={'size':15}, fmt=".2f", mask=mask)
+    plt.xticks(rotation=90)
+    plt.yticks(rotation=0)
+    plt.show()
+
+
+def plot_scatter(df, var_1, var_2, color, factor=None):
+    '''Scatter plot of two continuous numeric features'''
+    plt.figure(figsize=(8,8))
+    plt.scatter(df[var_1], df[var_2], color=color)
+    plt.title('Relationship between '+ var_1 + ' and ' + var_2)
+    plt.xlabel(var_1)
+    plt.ylabel(var_2)
+    plt.show()
+
+
+def compute_pearson_r(df, var_x, var_y):
     '''compute Pearson r correlation'''
-    corr_mat = np.corrcoef(df[x],df[y])
+    corr_mat = np.corrcoef(df[var_x],df[var_y])
     return corr_mat[0, 1]
 
-def EDA_plot_pair_linreg(df_0, df_1, num_var1, num_var2, 
-                         r_0, r_1, lab0, lab1):
+
+def plot_linear_reg(df, var_x, var_y, 
+                    pearson_r, color, label):
     '''plot a pair of linear regressions'''
-    plt.figure(figsize=(10,7))
-    plt.subplots_adjust(wspace=1)
-    # plot 1:
-    plt.subplot(1,2,1)
-    plt.plot(df_1[num_var1], df_1[num_var2], 'r--', label='r =%.2f' % r_1,
-             marker='.', linestyle='none', color='red')
+    plt.figure(figsize=(10,10))
+    plt.plot(df[var_x], df[var_y], 'r--', label='pearson_r =%.2f' % pearson_r,
+             marker='.', linestyle='none', color=color)
     plt.margins(0.02)
     plt.legend(loc='upper left')
-    plt.xlabel(num_var1)
-    plt.ylabel(num_var2)
-    plt.title(num_var1 + ' vs. ' + num_var2 + ' by ' + lab1)
+    plt.xlabel(var_x)
+    plt.ylabel(var_y)
+    plt.title(var_x + ' vs. ' + var_y + ' by ' + label)
     # Fit linear regression:
-    a,b = np.polyfit(df_1[num_var1], df_1[num_var2], 1)
+    a,b = np.polyfit(df[var_x], df[var_y], 1)
     x = np.array([0, 84])
     y = a*x + b
     plt.plot(x,y)
-    
-    # plot 2:
-    plt.subplot(1,2,2)
-    plt.plot(df_0[num_var1], df_0[num_var2], 'g--', label='r =%.2f' % r_0,
-             marker='.', linestyle='none', color='green')
-    plt.margins(0.02)
-    plt.legend(loc='upper left')
-    plt.xlabel(num_var1)
-    plt.ylabel(num_var2)
-    plt.title(num_var1 + ' vs. ' + num_var2 + ' by ' + lab0)
-    # Fit linear regression:
-    a,b = np.polyfit(df_0[num_var1], df_0[num_var2], 1)
-    x = np.array([0, 84])
-    y = a*x + b
-    plt.plot(x,y)
-    
-def EDA_plot_multi_facet_scatter(df1, df2, 
-                                 var1, lab1, 
-                                 var2, lab2,
-                                 response, factor):
-    '''plot multi-faceted scatter plot by county class'''
-    f, (ax1, ax2)=plt.subplots(1, 2, sharey=True, figsize=(8,4))
-    plt.subplots_adjust(hspace=0.2, wspace=0.2)
-    plt.tight_layout(pad=0.4, w_pad=1.5, h_pad=1.0)
-    ax1.scatter(df1[var1]*factor, df1[response], label='Nonmetro', edgecolor='w')
-    ax1.scatter(df2[var1]*factor, df2[response], label='Metro', edgecolor='w')
-    ax1.legend(loc='upper right')
-    ax1.set_xlabel(lab1, fontsize=10)
-    ax1.set_ylabel(response, fontsize=10)
-    ax1.grid(False)
-    
-    ax2.scatter(df1[var2]*factor, df1[response], label='Nonmetro', edgecolor='w')
-    ax2.scatter(df2[var2]*factor, df2[response], label='Metro', edgecolor='w')
-    ax2.legend(loc='upper right')
-    ax2.set_xlabel(lab2, fontsize=10)
-    ax2.set_ylabel(response, fontsize=10)
-    ax2.grid(False)
 
-def EDA_plot_color_sc_scatter(df, var1, lab1,
-                              var2, lab2, response):
-    '''plot color scaled scatter plots'''
-    # figure 1: subplot 1
-    f, (ax1) = plt.subplots(1,1, sharey=True, figsize=(10,6))
-    s1 = ax1.scatter(df[var1], df[var2], c=df[response],
-                     cmap=plt.cm.coolwarm, edgecolor='w')
-    ax1.set_xlabel(lab1, fontsize=14)
-    ax1.set_ylabel(lab2, fontsize=14)
-    ax1.grid(False)
-    # lenged: color bar scaled by confounding factor
-    plt.subplots_adjust(bottom=0.1, right=0.8, top=0.9)
-    cax=plt.axes([0.85, 0.1, 0.05, 0.8])
-    cb=f.colorbar(s1, cax=cax)
-    cb.set_label(response)
 
-# --- 3. Load the data --- #
-# Define input CSVs:
+# --- 2. Load the data --- #
+# define input CSVs:
 if __name__ == '__main__':
-    eda_file = 'df_eda_stroke.csv'
+    eda_file = 'stroke_train.csv'
 
-# Define type of variables list:
-#df_eda.select_dtypes(include='object').columns
-cat_vars = ['gender', 'hypertension', 'heart_disease', 'ever_married', 
-            'work_type', 'Residence_type', 'smoking_status']
-
-#df_eda.select_dtypes(include='int64').columns
-#df_eda.select_dtypes(include='float64').columns
-num_vars = ['age', 'avg_glucose_level', 'bmi']
-label_var = 'stroke'
-
-# Define variable(s) to drop:
-list_vars =['id']
-
-# Load data
+# load data:
 df_eda = load_file(eda_file)
+
+# check data types:
+df_eda.info()
+
+# define variable list:
+cat_vars = list(df_eda.select_dtypes(include='object').columns)
+num_vars = list(df_eda.select_dtypes(include='float64').columns)
+label_var = 'stroke'
+id_var = 'id'
 
 ################################################
 # Part 3 - Exploratory Data Analysis: Insights #
 ################################################
-# compute top 10 rows on a eda_dataframe:
+# compute top 10 rows:
 df_eda.head(10)
-
-# check duplicates:
-df_eda.duplicated().sum()
-
-#---- Compute % of Missing Data ----#
-missing_df = EDA_missing_data(df_eda)
-missing_df
     
-#---- Compute Summary Statistics: numerical data ----#
-summary_df_num = EDA_numerical_data(df_eda[num_vars])
-summary_df_num
+# ---3 perform summary statistics ---
+# numerical features:
+df_stat_num = eda_stat_num(df_eda[num_vars])
+df_stat_num
 
-#---- Compute Summary Statistics: categorical data ----#
-summary_df_cat = EDA_categorical_data(df_eda[cat_vars])
-summary_df_cat
+# categorical features:
+df_stat_cat = eda_stat_cat(df_eda)
+df_stat_cat
 
-########################################
-#---- Plot for numerical variables ----#
-########################################
-#---- Visualize numerical variable (age) ----#
-EDA_plot_num_var(df_eda, 'age')
+# ---4 detect outliers ---
+# create a missing % dataframe:
+df_missing = eda_missing(df_eda)
+df_missing
 
-#---- Visualize numerical variable (avg_glucose_level) ----#
-EDA_plot_num_var(df_eda, 'avg_glucose_level')
+# create a dataframe for IQR:
+df_outliers = eda_outliers(df_stat_num)
+df_outliers
 
-#---- Visualize numerical variable (bmi) ----#
-EDA_plot_num_var(df_eda, 'bmi')
-
-#--- Use IQR to detect potential outliers ----#
-stat = df_eda.avg_glucose_level.describe()
-print(stat)
-IQR = stat['75%'] - stat['25%'] 
-UB = stat['75%'] + 1.5*IQR
-LB = stat['25%'] - 1.5*IQR
-print('The LB and UB for suspected avg. glucose outliers are {} and {}. '.format(LB, UB))
-
-# Check LB Outeliers:
+# check outliers:
+# lower bounds (LBs)
 df_eda[df_eda.avg_glucose_level < 25.745]
 
-# Check UB Outeliers:
+# upper bounds (UBs)
 df_eda[df_eda.avg_glucose_level > 163.8649]
 
-# check potential outliers by categorical vars:
-df_eda.loc[df_eda.avg_glucose_level > 163.8649, 'work_type'].value_counts()
-df_eda.loc[df_eda.avg_glucose_level > 163.8649, 'smoking_status'].value_counts()
+# ---5 aggregate dataframe and compute KPIs ---
+# Define the dictionary for KPIs:
+#kpi_dict = {'id':'nunique', 'age':'mean',
+#            'avg_glucose_level':'mean', 'bmi':'mean'}
+#
+#df_agg_stroke = eda_agg_df_var(df_eda, 'stroke', kpi_dict)
+#
+## Print a summary KPI table by Worker Region:
+#df_agg_stroke
 
-#--- Check the suspicious outliers by an economic typology: mining-dependent
-df_eda[(df_eda.avg_glucose_level > 163.8649) & (df_eda.smoking_status == 'never smoked')]
+# ---6 visualize data: uni-variate ---
+# plot a histogram:    
+plot_hist(df_eda, 'age')
 
-#############################
-#---- Plot bar chart(s) ----#
-#############################
-# split dataframe by label:
-df_stroke, df_non_stroke = split_data_by_label(df_eda, 'stroke')
+plot_hist(df_eda, 'bmi')
 
-# Create a list of label:
-lab_list = list(df_eda['stroke'].unique())                 
-lab_name = ['non-stroke', 'stroke']
+plot_hist(df_eda, 'avg_glucose_level')
 
-# mean numeric variables by stroke conditions:    
-EDA_plot_mean_label_barchart(df_eda, 'age', 'bmi', 'avg_glucose_level', 
-                             'stroke', lab_list, lab_name)
+# plot a bar chart:
+plot_bar_chart(df_eda, 'hypertension')
 
-# mean age of stroke patients by categorical factors:    
-EDA_plot_mean_cat_barchart(df_stroke, 'age', 'gender', 'work_type', 'heart_disease', 'smoking_status')
+plot_bar_chart(df_eda, 'heart_disease')
 
-###########################
-#---- Plot pie charts ----#
-###########################
-# Split a groupby dataframe by stroke label: gender
-df_grp_gender_0, df_grp_gender_1 = split_groupby_data(df_eda,'stroke','gender')
-# Split a groupby dataframe by stroke label: marital_status
-df_grp_marital_0, df_grp_marital_1 = split_groupby_data(df_eda,'stroke','ever_married')
-# Split a groupby dataframe by stroke label: smoking_status
-df_grp_smoking_0, df_grp_smoking_1 = split_groupby_data(df_eda,'stroke','smoking_status')
-# Split a groupby dataframe by stroke label: hypertension
-df_grp_hypertension_0, df_grp_hypertension_1 = split_groupby_data(df_eda,'stroke','hypertension')
-# Split a groupby dataframe by stroke label: heart_disease
-df_grp_heart_disease_0, df_grp_heart_disease_1 = split_groupby_data(df_eda,'stroke','heart_disease')
+# grouped dataframe by a categorical feature:
+df_grp_stroke = eda_grouped_df_var(df_eda, 'stroke')
+df_grp_gender = eda_grouped_df_var(df_eda, 'gender')
+df_grp_residence_type = eda_grouped_df_var(df_eda, 'Residence_type')
+df_grp_work_type = eda_grouped_df_var(df_eda, 'work_type')
+df_grp_marital_status = eda_grouped_df_var(df_eda, 'ever_married')
+df_grp_smoking_status = eda_grouped_df_var(df_eda, 'smoking_status')
 
-# Plot a set of pie charts: by gender
-plot_pie_charts(df_grp_gender_0, df_grp_gender_1, df_grp_gender_0.index,
-                'gender', ['red', 'blue', 'purple'])
-# Plot a set of pie charts: by marital_status
-plot_pie_charts(df_grp_marital_0, df_grp_marital_1, df_grp_marital_0.index,
-                'marital status', ['red', 'green'])
-# Plot a set of pie charts: by smoking_status
-plot_pie_charts(df_grp_smoking_0, df_grp_smoking_1, df_grp_smoking_0.index,
-                'smoking status', ['deepskyblue','lawngreen','orange'])
-# Plot a set of pie charts: by hypertension
-plot_pie_charts(df_grp_hypertension_0, df_grp_hypertension_1, df_grp_hypertension_0.index,
-                'hypertension', ['green', 'red'])
-# Plot a set of pie charts: by heart_disease
-plot_pie_charts(df_grp_heart_disease_0, df_grp_heart_disease_1, df_grp_heart_disease_0.index,
-                'heart disease', ['green', 'red'])
+# Plot pie chart(s) by categorical features:
+plot_pie_chart(df_grp_stroke, 'Stroke',
+               df_grp_residence_type, 'Residence Type')
 
-#############################
-#---- Plot histograms ----# #
-#############################
-# Plot multiple histograms on numerical variables by a stroke label:
-EDA_plot_hist_label(df_eda, 'avg_glucose_level', 'stroke', 20, lab_list)
-plt.legend(('non-stroke','stroke'), loc='upper right')
-plt.show()
+plot_pie_chart(df_grp_work_type, 'Work Type',
+               df_grp_marital_status, 'Marital Status')
 
-EDA_plot_hist_label(df_eda, 'age', 'stroke', 20, lab_list)
-plt.legend(('non-stroke','stroke'), loc='upper right')
-plt.show()
+plot_pie_chart(df_grp_smoking_status, 'Smoking Status',
+               df_grp_gender, 'Gender')
 
-EDA_plot_hist_label(df_eda, 'bmi', 'stroke', 20, lab_list)
-plt.legend(('non-stroke','stroke'), loc='upper right')
-plt.show()
-    
-# Plot 3by1 histogram as a subplot: numerical variables
-EDA_plot_hist_3by1(df_eda,
-                   'avg_glucose_level', 15, 'Avg. Glucose Level',
-                   'bmi', 15, 'Body Mass Index',
-                   'age', 15, 'Age', 1)
-plt.show()
+# ---7 visualize data: bi-variate ---
+# plot a box-whisker:    
+plot_box(df_eda, 'age', 'stroke',
+        'avg_glucose_level', 'stroke')
 
-##############################
-#---- Plot bar chart(s) ----##
-##############################
-# Plot bar chart: smoking_status
-EDA_plot_freq_chart(df_eda, 'smoking_status', 'Smoking Status')
-plt.show()
+# create a dataframe:
+df_eda_cm = df_eda.copy()
 
-# Plot bar chart: work_type
-EDA_plot_freq_chart(df_eda, 'work_type', 'Work Type')
-plt.show()
+# check data type:
+df_eda_cm.info()
 
-# Plot bar chart: residence_type
-EDA_plot_freq_chart(df_eda, 'Residence_type', 'Residence Type')
-plt.show()
+# convert data type: object to category
+convert_dt_to_cat(df_eda_cm)
 
-# Plot bar chart: gender
-EDA_plot_freq_chart(df_eda, 'gender', 'Gender')
-plt.show()
-
-##########################################
-#---- Plot box-whisker plot chart(s) ----#
-##########################################
-# Plot box plot: Smoking Status
-EDA_plot_box_whisker(df_eda, 'age', 'smoking_status')
-plt.show()
-# Plot box plot: Work Type
-EDA_plot_box_whisker(df_eda, 'age', 'work_type')
-plt.show()
-# Plot box plot: Residence Type
-EDA_plot_box_whisker(df_eda, 'age', 'Residence_type')
-plt.show()
-
-# Drop 'row_id':
-#df_eda.drop(list_vars, axis=1, inplace=True)
-
-#---- Convert categorical variable data type from object to category ----#
-df_eda_cm = df_eda.copy() 
-EDA_convert_object_to_cat(df_eda_cm)
-
-#---- Encode categorical variables using avg. numerical variable for each category to replace label ----#
+# encode categorical variables using age:
 for col in df_eda_cm.columns:
-    if df_eda_cm[col].dtype.name == "category":
-        EDA_encode_cat_var(df_eda_cm, col, 'age')
-        
-#---- Plot correlation matrix chart ----#
-# Define list of features and salary
-features = ['age', 'avg_glucose_level', 'bmi', 'gender',
-            'hypertension', 'heart_disease',  'ever_married', 
-            'work_type', 'Residence_type',  'smoking_status']
-label = ['stroke']
+    if df_eda_cm[col].dtype.name == 'category':
+        eda_encode_cat_var(df_eda_cm, col, 'age')
 
-# Plot a correlation matrix:
-EDA_plot_corr_matrix(df_eda_cm, features, label)
+# Create a list of variables:
+list_vars = list(df_eda_cm.columns)
 
-########################################################
-# Bi-variate analyses: cross-tabulation, scatter plots #
-########################################################
-###################################
-#---- Plot a cross-tabulation ----#    
-###################################
-EDA_plot_crosstab(df_eda, 'heart_disease', 'hypertension')
+# Delete a list of unwanted variables:
+unwanted_list = {'ever_married', 'work_type', 
+                 'Residence_type', 'smoking_status'}
 
-EDA_plot_crosstab(df_eda, 'work_type', 'Residence_type')
+list_vars = [item for item in list_vars if item not in unwanted_list]
 
-######################################
-#---- Linear Regression Analysis ----#
-######################################
-# Compute correlation coefficient:
-# Compute Pearson r for stroke:
-r_age_glucose_1 = Pearson_r(df_stroke, 'age', 'avg_glucose_level')
-print(r_age_glucose_1) 
+# plot a correlation matrix:
+plot_corr_matrix(df_eda_cm, list_vars)
 
-# Compute Pearson r for non-stroke:
-r_age_glucose_0 = Pearson_r(df_non_stroke, 'age', 'avg_glucose_level')
-print(r_age_glucose_0)     
+# plot a cross-tabulation:
+plot_crosstab(df_eda, 'heart_disease', 'stroke')
+plot_crosstab(df_eda, 'hypertension', 'stroke')
 
-# Plot regression fit a pair of plots by stroke condition(s):
-EDA_plot_pair_linreg(df_non_stroke, df_stroke, 'age', 'avg_glucose_level',
-                     r_age_glucose_0, r_age_glucose_1, 'stroke', 'non-stroke')
-plt.show()
-    
-###############################
-#---- Plot a scatter plot ----#
-###############################
-# Demographics
-EDA_plot_scatter(df_eda, 
-                 'avg_glucose_level', 'Avg Glucose Level', 'green',
-                 'bmi', 'Body Mass Index', 'blue', 1)
+#---- Plot a scatter plot: w numerical variables ----#
+plot_scatter(df_eda, 'age', 'avg_glucose_level', 'green')
+
+plot_scatter(df_eda, 'age', 'bmi', 'blue')
+
+#---- Plot a linear regression plot: w numerical variables ----#
+# Compute Pearson r for following:
+r_age_glucose= compute_pearson_r(df_eda, 'age', 'avg_glucose_level')
+print(r_age_glucose) 
+
+r_age_bmi = compute_pearson_r(df_eda, 'age', 'bmi')
+print(r_age_bmi) 
+
+# Plot a linear regression analysis:
+plot_linear_reg(df_eda, 'age', 'avg_glucose_level',
+                r_age_glucose, 'green', 'patients')
 plt.show()
 
-####################################################################
-#---- Plot multi-faceted scatter plots by categorical variable ----#
-####################################################################
-
-#################################################################
-#---- Plot color scaled scatter plots by numerical variable ----#
-#################################################################
-EDA_plot_color_sc_scatter(df_eda, 'avg_glucose_level','Avg Glucose Level',
-                          'bmi', 'Body Mass Index', 'age')
+# Plot a linear regression analysis:
+plot_linear_reg(df_eda, 'age', 'bmi',
+                r_age_bmi, 'purple', 'patients')
 plt.show()
+
+# plot a frequency chart:
+plot_freq_chart('work_type', 'stroke', df_eda, None)
+
+plot_freq_chart('smoking_status', 'stroke', df_eda, None)
