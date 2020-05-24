@@ -1,0 +1,15 @@
+feature,importance
+count_6-12_months_late,0.20774990013409456
+perc_premium_paid_by_cash_credit,0.16995869909588873
+count_more_than_12_months_late,0.10747613726104556
+application_underwriting_score,0.1029201307178319
+income,0.09656934504184056
+count_3-6_months_late,0.09602454603170721
+age,0.07654130508205831
+no_of_premiums_paid,0.06525673795301364
+premium,0.04466751358774646
+residence_area_type_Urban,0.012619747383953479
+sourcing_channel_B,0.008158294257214161
+sourcing_channel_C,0.006515342670877485
+sourcing_channel_D,0.005250953713156522
+sourcing_channel_E,0.0002913470695713991
