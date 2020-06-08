@@ -20,7 +20,8 @@ import sklearn.metrics as skm
 from statsmodels.formula.api import ols
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from sklearn.utils import shuffle
-from sklearn.preprocessing import Imputer, StandardScaler, PolynomialFeatures 
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, PolynomialFeatures 
 from sklearn.model_selection import KFold, train_test_split
 from sklearn.model_selection import cross_val_score, RandomizedSearchCV
 from sklearn.pipeline import make_pipeline
@@ -363,7 +364,7 @@ del(df_staging)
 #df_test_id = df_test_clean['row_id']
 
 # --- 6. Feature Encoding --- #
-# convert temperature "Fahrenheit" to "Celsious":
+# convert temperature "Fahrenheit" to "Celcius":
 df_staging_raw['Temperature'] = (df_staging_raw['Temperature'] - 32) * 5/9
 
 # format date as follow:

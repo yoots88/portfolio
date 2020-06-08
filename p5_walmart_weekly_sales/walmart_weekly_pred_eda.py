@@ -44,6 +44,12 @@ def join_data(df1, df2, join_type, key=None,
     return df_join
 
 
+def drop_column(df, var_name):
+    ''' drop a column on dataframe '''
+    df = df.drop(var_name, axis=1)
+    return df
+
+
 def convert_dt_as_date(df, var_name, date_format):
     '''convert the variable as specified date format'''
     df[var_name] = pd.to_datetime(df[var_name], format=date_format)
@@ -98,20 +104,21 @@ def check_value_counts(df, var_name):
     grouped_counts = df[var_name].value_counts()
     return grouped_counts
 
-
-def feature_replacement(X):
-    ''' replace missing values based on specific data type of a column '''
-    for col in X.columns:
-        if X[col].dtype.name == 'object':
-            mode = X[col].mode().iloc[0]
-            X[col] = X[col].fillna(mode)
-        elif X[col].dtype.name == 'float64':
-            mean = X[col].mean()
-            X[col] = X[col].fillna(mean)
+def feature_replacement(df):
+    '''impute missing values based on specific data type and a column'''
+    for column in df.columns:
+        if df[column].dtype.name == 'object':
+            mode = df[column].mode().iloc[0]
+            df[column] = df[column].fillna(mode)
+        elif df[column].dtype.name == 'float64':
+            mean = df[column].mean()
+            df[column] = df[column].fillna(mean)
+        elif df[column].dtype.name == 'datetime64[ns]':
+            pseudo_date = pd.Timestamp.max
+            df[column] = df[column].fillna(pseudo_date)
         else:
-            X[col].dtype.name == 'int64'
-            median = X[col].median()
-            X[col] = X[col].fillna(median)
+            md_cols = df.columns[df.columns.str.contains(pat = 'MarkDown')]
+            df[md_cols] = df[md_cols].fillna(0)
             
 
 def eda_missing(df):
@@ -325,7 +332,41 @@ df_eda = join_data(df_eda, df_dimension, 'left', list_key_2)
 del(df_dimension, df_feature, df_store)
 del(list_key_1, list_key_2)
 
-# --- 4. ETL - merging/subsetting data --- #
+# --- 4. Feature Engineering --- #
+# convert temperature "Fahrenheit" to "Celcius":
+df_eda['Temperature'] = (df_eda['Temperature'] - 32) * 5/9
+
+# format date as follow:
+date_format = '%Y-%m-%d'
+df_eda['Date'] = pd.to_datetime(df_eda['Date'])
+
+# Create a variable: dummy holiday type:
+holiday_type = ['Superbowl', 'Labor_Day', 'Thanksgiving', 'Black_Friday', 'Christmas_Eves']
+
+# adjustments based on Walmart weekly transaction date:
+conditions = [(df_eda['Date']=='2010-2-12') | # 2010/02/05 + 7 days
+        (df_eda['Date']=='2011-2-11') |   # 2011/02/04 + 7 days
+        (df_eda['Date']=='2012-2-3'),    # 2012/02/03 + 0 days
+        (df_eda['Date']=='2010-9-10') |   # 2010/09/06 + 4 days 
+        (df_eda['Date']=='2011-9-9') |   # 2011/09/05 + 4 days
+        (df_eda['Date']=='2012-9-7'),    # 2012/09/03 + 0 days
+        (df_eda['Date']=='2010-10-15') | # 2010/10/11 + 4 days
+        (df_eda['Date']=='2011-10-14') | # 2011/10/10 + 4 days
+        (df_eda['Date']=='2012-10-5'),   # 2012/10/08 + 0 days
+        (df_eda['Date']=='2010-11-26') | # 2010/11/26 + 0 days
+        (df_eda['Date']=='2011-11-25'),  # 2011/11/25 + 0 days
+        (df_eda['Date']=='2010-12-24') | # 2010/12/24 + 0 days
+        (df_eda['Date']=='2011-12-23') ] # 2011/12/23 + 0 days
+    
+df_eda['Holiday_Type'] = np.select(conditions, holiday_type, default='non-holidays')
+
+# check data type:
+df_eda.info()
+
+# Drop a column: Date_String
+# df_eda = drop_column(df_eda, 'Date_String')
+
+# --- 5. ETL - merging/subsetting data --- #
 # define variables:
 var_label = 'Weekly_Sales'
 var_id_1 = 'Store'
@@ -344,9 +385,6 @@ list_unwanted = {'Store','Dept'}
 vars_num = [item for item in vars_num if item not in list_unwanted]
 
 del(vars_num_disc, vars_num_cont)
-
-# check data types on dataframes:
-df_eda.info()
 
 ################################################
 # Part 3 - Exploratory Data Analysis: Insights #
@@ -394,16 +432,12 @@ df_outliers
 
 # check outliers:
 # lower bounds (LBs)
-df_eda[df_eda.Temperature < 5.28]
+df_eda[df_eda.Temperature < -14.84]
 
 # upper bounds (UBs)
 df_eda[df_eda.Weekly_Sales > 47395]
 
 # ---5 aggregate dataframe and compute KPIs ---
-# create a Date_String column:
-df_eda['Date_String'] = [datetime.strptime(date, '%Y-%m-%d').date() 
-                            for date in df_eda['Date'].astype(str).values.tolist()]
-
 # create a id column:
 gen_unique_id(df_eda, 'Store', 'Dept', 'Date')
 
@@ -416,6 +450,10 @@ df_agg_store = eda_agg_df_var(df_eda, 'Store', kpi_dict)
 df_agg_store['Sales_Per_Transactions'] = df_agg_store.Weekly_Sales/df_agg_store.trans_id
 
 df_agg_store = df_agg_store.sort_values(by='Sales_Per_Transactions', ascending=False)
+
+# assessment on effect of holidays:
+df_agg_holiday_type = eda_agg_df_var(df_eda, 'Holiday_Type', kpi_dict)
+df_agg_holiday_type
 
 # Print a summary KPI table by Store:
 df_agg_store.rename_axis('Store')
